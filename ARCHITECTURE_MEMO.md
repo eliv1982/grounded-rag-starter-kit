@@ -113,7 +113,9 @@ It is not part of the RAG core.
 
 Expected flow:
 
+```text
 query -> retrieval -> answer / structured result -> PDF export
+```
 
 The core should provide structured data that exporters can use.
 
@@ -121,16 +123,20 @@ The core should provide structured data that exporters can use.
 
 The project should support at least two execution modes:
 
+Chat generation and embeddings are different model responsibilities. The core must keep them separately configurable and swappable.
+
 ### Hosted mode
 
 Hosted OpenAI or OpenAI-compatible API.
 
 Typical configuration:
 
+```env
 OPENAI_API_KEY=...
 OPENAI_BASE_URL=...
 RAG_CHAT_MODEL=...
 RAG_EMBEDDING_MODEL=...
+```
 
 ### Local/private mode
 
@@ -138,12 +144,21 @@ Local OpenAI-compatible endpoint, for example via Ollama or similar local runtim
 
 Typical configuration:
 
+```env
 OPENAI_API_KEY=local-placeholder
 OPENAI_BASE_URL=http://localhost:11434/v1
 RAG_CHAT_MODEL=...
 RAG_EMBEDDING_MODEL=...
+```
 
 The code should not be hardcoded to a single provider.
+
+## Embedding and vector store compatibility
+
+- The vector store is tied to the embedding model used to create embeddings.
+- One Chroma database should not be reused across different embedding models.
+- Hosted and local modes should use separate `RAG_CHROMA_PATH` values to avoid mixed embedding spaces.
+- If embedding model, corpus, chunking, or preprocessing changes, the project must reindex and bump `RAG_CORPUS_VERSION`.
 
 ## Grounding and safety
 
@@ -167,6 +182,45 @@ Do not:
 - over-abstract simple working code;
 - break the existing working CLI while refactoring;
 - move everything at once.
+
+## Data and runtime hygiene
+
+By default, the following should not be committed:
+
+- `.env`;
+- `runtime/`;
+- vector store artifacts;
+- cache DB files;
+- private or confidential source documents.
+
+Teams can explicitly override this rule only with a clear security/compliance reason.
+
+## Configuration layering
+
+Each vertical project should maintain its own configuration layer, including:
+
+- `knowledge_config`;
+- corpus paths;
+- prompt profile;
+- evaluation dataset;
+- export profile;
+- UI labels and product copy.
+
+The reusable core should remain neutral and accept these settings as inputs.
+
+## Current baseline status
+
+The current flat structure is acceptable during migration.
+
+The following files should migrate gradually, in small safe increments:
+
+- `app.py`;
+- `rag_pipeline.py`;
+- `vector_store.py`;
+- `cache.py`;
+- `openai_client.py`;
+- `corpus_config.py`;
+- `evaluate_ragas.py`.
 
 ## Migration strategy
 

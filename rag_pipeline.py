@@ -10,22 +10,26 @@ from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
 
 from cache import RAGCache
-from openai_client import get_openai_client
+from llm_client import get_llm_client
 from corpus_config import default_corpus_entries
 from vector_store import VectorStore
 
-_env = Path(__file__).resolve().parent.parent / ".env"
+_env = Path(__file__).resolve().parent / ".env"
 if _env.exists():
     load_dotenv(_env)
 else:
     load_dotenv()
 
 
-LEGAL_SYSTEM_PROMPT = (
-    "Ты — ассистент по вопросам независимых гарантий (банковских и иных). "
-    "Отвечаешь строго на основе переданных фрагментов базы знаний. "
-    "Не выдавай юридических заключений и не подменяй консультацию юриста; "
-    "формулируй осторожно, если контекст неполный."
+LEGAL_RAG_SYSTEM_PROMPT = (
+    "Ты — помощник по юридическим вопросам на основе документов. "
+    "Отвечай строго на основе переданных фрагментов контекста. "
+    "Для каждого существенного тезиса указывай источник из контекста. "
+    "Если данных недостаточно, прямо укажи, что в предоставленных документах недостаточно оснований для вывода. "
+    "Не делай неподтвержденных юридических выводов и не представляй ответ как окончательную юридическую консультацию. "
+    "Четко отделяй факты из источников от осторожных выводов. "
+    "Сохраняй язык ответа пользователя. "
+    "Не придумывай источники, нормы, статьи, дела и цитаты, которых нет в контексте."
 )
 
 
@@ -72,7 +76,7 @@ class RAGPipeline:
         self.max_tokens = int(os.getenv("RAG_MAX_TOKENS", "1500"))
         self.temperature = float(os.getenv("RAG_TEMPERATURE", "0.3"))
 
-        self.openai_client = get_openai_client()
+        self.llm_client = get_llm_client()
 
         if persist_directory is None:
             persist_directory = os.getenv("RAG_CHROMA_PATH", str(self._runtime_dir / "chroma_db"))
@@ -93,13 +97,13 @@ class RAGPipeline:
                 print(f"Загрузка документов из {data_file}...")
                 self.vector_store.load_documents(data_file, base_dir=self._base_dir)
             else:
-                print("Загрузка корпуса по умолчанию (ГК РФ, URDG, обзор ВС)...")
+                print("Загрузка корпуса по умолчанию...")
                 self.vector_store.load_corpus(default_corpus_entries(), base_dir=self._base_dir)
 
         print("Инициализация кеша...")
         self.cache = RAGCache(db_path=cache_db_path)
 
-        print("RAG Pipeline инициализирован (API mode)")
+        print("RAG Pipeline инициализирован")
 
     def _format_context_block(self, doc: Dict[str, Any], index: int) -> str:
         meta = doc.get("metadata") or {}
@@ -118,7 +122,7 @@ class RAGPipeline:
         parts = [self._format_context_block(d, i) for i, d in enumerate(context_docs, start=1)]
         context = "\n---\n".join(parts)
 
-        return f"""Ты помогаешь разбирать вопросы по независимым гарантиям с опорой на фрагменты норм (ГК РФ), правил URDG (если есть в контексте) и обзоров судебной практики ВС РФ.
+        return f"""Ты анализируешь юридический вопрос по предоставленным фрагментам документов.
 
 Фрагменты базы знаний:
 {context}
@@ -126,19 +130,21 @@ class RAGPipeline:
 Вопрос пользователя: {query}
 
 Инструкции:
-- Отвечай только на основе приведённых фрагментов. Если данных недостаточно, прямо укажи, чего не хватает (например, нет статьи ГК или нет позиции суда).
-- Для каждого существенного тезиса укажи источник: «ГК РФ», «URDG» или «обзор практики ВС» — по тому, из какого фрагмента он взят (ориентируйся на пометки в тексте фрагмента).
-- Если во фрагментах есть разные уровни регулирования (закон vs договорная подчинённость URDG vs обобщение судебной практики), не смешивай их молча: раздели логику («по закону…», «по URDG…», «по позициям из обзора…»).
-- Не придумывай номера статей, дел и цитат, которых нет во фрагментах.
-- Ответ на русском языке; структурируй списком, если это улучшает ясность.
+- Отвечай только на основе приведённых фрагментов контекста.
+- Для каждого существенного тезиса укажи источник по меткам из фрагментов.
+- Если в предоставленных документах недостаточно оснований для уверенного вывода, прямо так и напиши и укажи, каких данных не хватает.
+- Не делай неподтвержденных юридических выводов и не представляй ответ как окончательное юридическое заключение.
+- Разделяй факты из источников и осторожные выводы/допущения отдельными формулировками.
+- Сохраняй язык ответа пользователя.
+- Не придумывай источники, нормы, статьи, дела и цитаты, которых нет во фрагментах.
 
 Ответ:"""
 
     def _generate_answer(self, prompt: str) -> str:
-        response = self.openai_client.chat.completions.create(
+        response = self.llm_client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": LEGAL_SYSTEM_PROMPT},
+                {"role": "system", "content": LEGAL_RAG_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
             temperature=self.temperature,
@@ -166,14 +172,14 @@ class RAGPipeline:
                 }
             print("[-] Ответ не найден в кеше")
 
-        print("[*] Поиск релевантных документов через API...")
+        print("[*] Поиск релевантных документов...")
         context_docs = self.vector_store.search(user_query, top_k=self.top_k)
         print(f"[+] Найдено {len(context_docs)} релевантных документов")
 
         print("[*] Формирование промпта...")
         prompt = self._create_prompt(user_query, context_docs)
 
-        print(f"[*] Генерация ответа через OpenAI API ({self.model})...")
+        print(f"[*] Генерация ответа через LLM ({self.model})...")
         answer = self._generate_answer(prompt)
         print("[+] Ответ получен от API")
 
@@ -218,9 +224,9 @@ if __name__ == "__main__":
         pipeline = RAGPipeline()
 
         test_queries = [
-            "Когда независимая гарантия вступает в силу по ГК РФ?",
-            "Что такое надлежащее представление по URDG?",
-            "Может ли гарант ссылаться на основное обязательство при отказе бенефициару?",
+            "Какие условия договора прямо указаны в предоставленных документах?",
+            "Какие основания для отказа или ограничения ответственности есть в контексте?",
+            "Какие факты в материалах подтверждены источниками, а какие требуют уточнения?",
         ]
 
         for query in test_queries:

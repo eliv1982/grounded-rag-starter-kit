@@ -1,5 +1,5 @@
 """
-Консольное приложение для взаимодействия с RAG ассистентом (API mode).
+Консольное приложение для взаимодействия с RAG ассистентом.
 """
 
 import os
@@ -23,8 +23,8 @@ def print_banner():
     """Вывод приветственного баннера."""
     banner = """
 ╔══════════════════════════════════════════════════════════╗
-║         RAG Ассистент (API Mode)                        ║
-║  Retrieval-Augmented Generation через OpenAI API        ║
+║         RAG Ассистент                                   ║
+║  Retrieval-Augmented Generation по базе знаний          ║
 ╚══════════════════════════════════════════════════════════╝
     """
     print(banner)
@@ -50,7 +50,7 @@ def print_response(result: dict):
         if 'cached_at' in result:
             print(f"   Сохранено: {result['cached_at']}")
     else:
-        print(f"🌐 Источник: OpenAI API ({result.get('model', 'LLM')})")
+        print(f"🌐 Модель: {result.get('model', 'LLM')}")
         print(f"   Использовано документов: {len(result.get('context_docs', []))}")
     
     print(f"\n💬 Ответ:\n{result['answer']}")
@@ -113,7 +113,8 @@ def print_stats(pipeline: RAGPipeline):
     print(f"\n🤖 Модель: {stats['model']}")
     print(f"🔢 top_k: {stats.get('top_k', '—')}, max_tokens: {stats.get('max_tokens', '—')}")
     print(f"📌 Версия корпуса (кеш): {stats.get('corpus_version', '—')}")
-    print(f"🌐 Режим: {stats['mode']}")
+    mode_label = "LLM" if stats.get("mode") == "API" else stats.get("mode", "—")
+    print(f"🌐 Режим: {mode_label}")
     print(f"{'═'*60}\n")
 
 
