@@ -36,8 +36,9 @@ class VectorStore:
     ):
         self.collection_name = collection_name
         if persist_directory is None:
-            persist_directory = str(Path(__file__).resolve().parent / "chroma_db")
+            persist_directory = str(Path(__file__).resolve().parent / "runtime" / "chroma_db")
         self.persist_directory = persist_directory
+        Path(self.persist_directory).mkdir(parents=True, exist_ok=True)
 
         self.client = chromadb.PersistentClient(path=persist_directory)
 

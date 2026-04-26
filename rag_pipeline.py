@@ -65,6 +65,8 @@ class RAGPipeline:
             raise ValueError("OPENAI_API_KEY не установлен")
 
         self._base_dir = Path(__file__).resolve().parent
+        self._runtime_dir = self._base_dir / "runtime"
+        self._runtime_dir.mkdir(parents=True, exist_ok=True)
         self.model = model or os.getenv("RAG_CHAT_MODEL", "gpt-4o-mini")
         self.top_k = int(os.getenv("RAG_TOP_K", "5"))
         self.max_tokens = int(os.getenv("RAG_MAX_TOKENS", "1500"))
@@ -73,9 +75,9 @@ class RAGPipeline:
         self.openai_client = get_openai_client()
 
         if persist_directory is None:
-            persist_directory = os.getenv("RAG_CHROMA_PATH", str(self._base_dir / "chroma_db"))
+            persist_directory = os.getenv("RAG_CHROMA_PATH", str(self._runtime_dir / "chroma_db"))
         if cache_db_path is None:
-            cache_db_path = str(self._base_dir / "api_rag_cache.db")
+            cache_db_path = str(self._runtime_dir / "rag_cache.db")
 
         print("Инициализация векторного хранилища...")
         self.vector_store = VectorStore(

@@ -31,6 +31,9 @@ class RAGCache:
             db_path: путь к файлу базы данных SQLite
         """
         self.db_path = db_path
+        db_parent = Path(self.db_path).parent
+        if str(db_parent) not in ("", "."):
+            db_parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
     
     def _init_db(self):

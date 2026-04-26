@@ -134,10 +134,12 @@ def main():
         # Инициализация RAG pipeline
         print("🚀 Инициализация системы...\n")
         _here = Path(__file__).resolve().parent
+        _runtime = _here / "runtime"
+        _runtime.mkdir(parents=True, exist_ok=True)
         pipeline = RAGPipeline(
             collection_name="api_rag_collection",
-            cache_db_path=str(_here / "api_rag_cache.db"),
-            persist_directory=os.getenv("RAG_CHROMA_PATH", str(_here / "chroma_db")),
+            cache_db_path=str(_runtime / "rag_cache.db"),
+            persist_directory=os.getenv("RAG_CHROMA_PATH", str(_runtime / "chroma_db")),
             model=os.getenv("RAG_CHAT_MODEL", "gpt-4o-mini"),
         )
         print("\n✅ Система готова к работе!\n")
