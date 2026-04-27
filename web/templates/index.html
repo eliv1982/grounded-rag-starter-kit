@@ -30,6 +30,19 @@
 {% if answer %}
 <section class="card">
   <h2>Ответ</h2>
+  <div class="answer-meta">
+    {% if from_cache %}
+      <span class="answer-badge">Ответ из кэша</span>
+    {% else %}
+      <span class="answer-badge">Сгенерировано моделью</span>
+    {% endif %}
+    {% if model %}
+      <span class="answer-subtle">Модель: {{ model }}</span>
+    {% endif %}
+    {% if cached_at %}
+      <span class="answer-subtle">Сохранено: {{ cached_at }}</span>
+    {% endif %}
+  </div>
   <p class="answer-text">{{ answer }}</p>
 </section>
 {% endif %}

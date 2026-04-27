@@ -29,6 +29,9 @@ def index(request: Request):
             "answer": "",
             "context_docs": [],
             "error": "",
+            "from_cache": None,
+            "model": "",
+            "cached_at": "",
         },
     )
 
@@ -43,6 +46,9 @@ def ask(request: Request, question: str = Form(default="")):
     answer = ""
     context_docs: List[Dict[str, Any]] = []
     error = ""
+    from_cache = None
+    model = ""
+    cached_at = ""
     normalized_question = question.strip()
 
     if not normalized_question:
@@ -52,6 +58,9 @@ def ask(request: Request, question: str = Form(default="")):
             result = _get_pipeline().query(normalized_question)
             answer = result.get("answer", "")
             context_docs = result.get("context_docs") or []
+            from_cache = result.get("from_cache")
+            model = result.get("model", "")
+            cached_at = result.get("cached_at", "")
         except Exception as exc:
             error = str(exc)
 
@@ -63,6 +72,9 @@ def ask(request: Request, question: str = Form(default="")):
             "answer": answer,
             "context_docs": context_docs,
             "error": error,
+            "from_cache": from_cache,
+            "model": model,
+            "cached_at": cached_at,
         },
     )
 
