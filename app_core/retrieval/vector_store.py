@@ -140,6 +140,81 @@ class VectorStore:
             chunks.append(current)
         return [c for c in chunks if len(c) >= self.min_chunk_len]
 
+    def _split_oversized_chunk(self, text: str, max_len: int, overlap: int) -> List[str]:
+        cleaned = (text or "").strip()
+        if not cleaned:
+            return []
+        if max_len <= 0:
+            return [cleaned]
+        if len(cleaned) <= max_len:
+            return [cleaned]
+
+        overlap = max(0, min(overlap, max_len // 2)) if max_len > 1 else 0
+        step = max(1, max_len - overlap)
+        min_natural_cut = max(1, int(max_len * 0.5))
+        separators = ["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " "]
+
+        chunks: List[str] = []
+        start = 0
+        total_len = len(cleaned)
+
+        while start < total_len:
+            end = min(start + max_len, total_len)
+            if end >= total_len:
+                tail = cleaned[start:].strip()
+                if tail:
+                    chunks.append(tail)
+                break
+
+            window = cleaned[start:end]
+            cut = -1
+            for sep in separators:
+                idx = window.rfind(sep)
+                if idx >= min_natural_cut:
+                    cut = start + idx + len(sep)
+                    break
+
+            if cut <= start:
+                cut = end
+
+            piece = cleaned[start:cut].strip()
+            if piece:
+                chunks.append(piece)
+            else:
+                cut = end
+
+            next_start = max(0, cut - overlap)
+            if next_start <= start:
+                next_start = start + step
+            start = next_start
+
+        return chunks
+
+    def _enforce_hard_chunk_limit(
+        self, rows: List[Tuple[str, Dict[str, str]]], max_len: int, overlap: int
+    ) -> List[Tuple[str, Dict[str, str]]]:
+        if max_len <= 0:
+            return rows
+
+        out: List[Tuple[str, Dict[str, str]]] = []
+        for doc_text, meta in rows:
+            if len(doc_text) <= max_len:
+                out.append((doc_text, meta))
+                continue
+
+            split_parts = self._split_oversized_chunk(doc_text, max_len, overlap)
+            if not split_parts:
+                continue
+
+            for idx, part in enumerate(split_parts):
+                if not part:
+                    continue
+                new_meta = dict(meta)
+                new_meta["hard_split_index"] = str(idx)
+                out.append((part, new_meta))
+
+        return out
+
     def _split_statute_sections(self, text: str) -> List[str]:
         parts = _STATUTE_BOUNDARY.split(text)
         parts = [p.strip() for p in parts if p.strip()]
@@ -172,6 +247,7 @@ class VectorStore:
         chunk_size = self.chunk_size
         overlap = self.chunk_overlap
         kind_label = self._kind_label(source_kind)
+        prefix_template = f"[Источник: {source_display} | {kind_label}]\n[Фрагмент: {{heading}}]\n\n"
 
         if doc_type == "statute":
             sections = self._split_statute_sections(text)
@@ -181,8 +257,9 @@ class VectorStore:
         out: List[Tuple[str, Dict[str, str]]] = []
         for section in sections:
             heading = self._section_heading(section)
+            prefix = prefix_template.format(heading=heading)
+            max_body_len = max(1, chunk_size - len(prefix))
             if len(section) <= chunk_size:
-                body = section
                 meta = {
                     "source": source,
                     "source_display": source_display,
@@ -191,11 +268,10 @@ class VectorStore:
                     "section_heading": heading,
                     "subchunk_index": "",
                 }
-                doc_text = (
-                    f"[Источник: {source_display} | {kind_label}]\n"
-                    f"[Фрагмент: {heading}]\n\n{body}"
-                )
-                if len(doc_text) >= self.min_chunk_len:
+                for body_part in self._split_oversized_chunk(section, max_body_len, overlap):
+                    doc_text = f"{prefix}{body_part}"
+                    if len(doc_text) < self.min_chunk_len:
+                        continue
                     out.append((doc_text, meta))
                 continue
 
@@ -204,7 +280,6 @@ class VectorStore:
                 body = sub.strip()
                 if len(body) < self.min_chunk_len:
                     continue
-                enriched = f"{heading}\n\n{body}"
                 meta = {
                     "source": source,
                     "source_display": source_display,
@@ -213,11 +288,11 @@ class VectorStore:
                     "section_heading": heading,
                     "subchunk_index": str(i),
                 }
-                doc_text = (
-                    f"[Источник: {source_display} | {kind_label}]\n"
-                    f"[Фрагмент: {heading}]\n\n{enriched}"
-                )
-                out.append((doc_text, meta))
+                for body_part in self._split_oversized_chunk(body, max_body_len, overlap):
+                    doc_text = f"{prefix}{body_part}"
+                    if len(doc_text) < self.min_chunk_len:
+                        continue
+                    out.append((doc_text, meta))
         return out
 
     def _resolve_path(self, path: Path, base_dir: Path) -> Path:
@@ -238,6 +313,16 @@ class VectorStore:
         if self.collection.count() > 0:
             print("Документы уже загружены в коллекцию")
             return
+
+        effective_embed_batch_size = max(1, int(os.getenv("RAG_EMBED_BATCH_SIZE", "16")))
+        print(
+            "[INFO] Effective config: "
+            f"embedding_model={self.embedding_model} "
+            f"chunk_size={self.chunk_size} "
+            f"chunk_overlap={self.chunk_overlap} "
+            f"min_chunk_len={self.min_chunk_len} "
+            f"embed_batch_size={effective_embed_batch_size}"
+        )
 
         base = base_dir or Path(__file__).resolve().parent
         all_rows: List[Tuple[str, Dict[str, str]]] = []
@@ -264,7 +349,28 @@ class VectorStore:
         if not all_rows:
             raise ValueError("Корпус пуст после нарезки")
 
-        print(f"Всего чанков: {len(all_rows)}. Создание эмбеддингов…")
+        before_total = len(all_rows)
+        before_max_len = max((len(doc) for doc, _ in all_rows), default=0)
+        print(
+            "[INFO] Chunk summary before hard-limit pass: "
+            f"total={before_total} max_len={before_max_len}"
+        )
+
+        all_rows = self._enforce_hard_chunk_limit(
+            all_rows, max_len=self.chunk_size, overlap=self.chunk_overlap
+        )
+
+        if not all_rows:
+            raise ValueError("Корпус пуст после hard-limit pass")
+
+        after_total = len(all_rows)
+        after_max_len = max((len(doc) for doc, _ in all_rows), default=0)
+        print(
+            "[INFO] Chunk summary after hard-limit pass: "
+            f"total={after_total} max_len={after_max_len}"
+        )
+
+        print(f"Всего чанков: {after_total}. Создание эмбеддингов…")
         documents = [r[0] for r in all_rows]
         metadatas = [r[1] for r in all_rows]
         embeddings = self._create_embeddings_batched(documents)
@@ -340,6 +446,17 @@ class VectorStore:
                         f"пауза {wait} с… ({e.__class__.__name__})"
                     )
                     time.sleep(wait)
+                except Exception:
+                    batch_lengths = [len(item) for item in batch]
+                    max_batch_len = max(batch_lengths) if batch_lengths else 0
+                    min_batch_len = min(batch_lengths) if batch_lengths else 0
+                    print(
+                        "[ERROR] Embedding batch failed: "
+                        f"start={i} batch_size={len(batch)} "
+                        f"min_item_len={min_batch_len} max_item_len={max_batch_len} "
+                        f"model={self.embedding_model}"
+                    )
+                    raise
             else:
                 raise RuntimeError(self._embedding_connection_hint(last_err)) from last_err
         return all_emb
