@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}RAG Assistant{% endblock %}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2rem; color: #1f2937; }
+    .container { max-width: 760px; margin: 0 auto; }
+    h1 { margin-bottom: 0.4rem; }
+    p { color: #4b5563; }
+    textarea { width: 100%; min-height: 140px; padding: 0.75rem; }
+    button { margin-top: 0.75rem; padding: 0.6rem 1rem; }
+  </style>
+</head>
+<body>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
+

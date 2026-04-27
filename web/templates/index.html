@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}RAG Assistant{% endblock %}
+
+{% block content %}
+<h1>RAG Assistant</h1>
+<p>Reusable RAG core for vertical AI assistants</p>
+
+<form method="post" action="#">
+  <label for="question">Question</label>
+  <textarea id="question" name="question" placeholder="Ask a question..."></textarea>
+  <button type="submit">Submit</button>
+</form>
+{% endblock %}
+
