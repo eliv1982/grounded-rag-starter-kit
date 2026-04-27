@@ -22,10 +22,10 @@ else:
 def print_banner():
     """Вывод приветственного баннера."""
     banner = """
-╔══════════════════════════════════════════════════════════╗
-║         RAG Ассистент                                   ║
-║  Retrieval-Augmented Generation по базе знаний          ║
-╚══════════════════════════════════════════════════════════╝
++----------------------------------------------------------+
+|                    RAG Ассистент                         |
+|      Retrieval-Augmented Generation по базе знаний       |
++----------------------------------------------------------+
     """
     print(banner)
     print("Введите 'exit' или 'quit' для выхода")
@@ -40,20 +40,20 @@ def print_response(result: dict):
     Args:
         result: словарь с результатом запроса
     """
-    print(f"\n{'─'*60}")
-    print(f"📝 Вопрос: {result['query']}")
-    print(f"{'─'*60}")
+    print(f"\n{'-'*60}")
+    print(f"[Q] Вопрос: {result['query']}")
+    print(f"{'-'*60}")
     
     # Индикатор источника ответа
     if result['from_cache']:
-        print("💾 Источник: КЕШ")
+        print("[CACHE] Источник: КЕШ")
         if 'cached_at' in result:
             print(f"   Сохранено: {result['cached_at']}")
     else:
-        print(f"🌐 Модель: {result.get('model', 'LLM')}")
+        print(f"[LLM] Модель: {result.get('model', 'LLM')}")
         print(f"   Использовано документов: {len(result.get('context_docs', []))}")
     
-    print(f"\n💬 Ответ:\n{result['answer']}")
+    print(f"\n[ANSWER]\n{result['answer']}")
 
     # Полный список фрагментов контекста (раньше показывались только 2 — см. RAG_CLI_CONTEXT_MAX_ITEMS)
     ctx = result.get("context_docs") or []
@@ -63,7 +63,7 @@ def print_response(result: dict):
         docs = ctx[:max_items] if max_items > 0 else ctx
         src = "кеша" if result["from_cache"] else "ретрива"
         note = f" (показано {len(docs)} из {len(ctx)})" if len(docs) < len(ctx) else ""
-        print(f"\n📚 Контекст из {src} ({len(ctx)} фрагментов){note}:")
+        print(f"\n[CONTEXT] Контекст из {src} ({len(ctx)} фрагментов){note}:")
         for i, doc in enumerate(docs, 1):
             text = doc["text"] if isinstance(doc, dict) else str(doc)
             meta = doc.get("metadata", {}) if isinstance(doc, dict) else {}
@@ -81,7 +81,7 @@ def print_response(result: dict):
             print(" ".join(parts))
             print(f"      {preview}")
     
-    print(f"{'─'*60}\n")
+    print(f"{'-'*60}\n")
 
 
 def print_stats(pipeline: RAGPipeline):
@@ -93,16 +93,16 @@ def print_stats(pipeline: RAGPipeline):
     """
     stats = pipeline.get_stats()
     
-    print(f"\n{'═'*60}")
-    print("📊 СТАТИСТИКА СИСТЕМЫ")
-    print(f"{'═'*60}")
+    print(f"\n{'='*60}")
+    print("[STATS] СТАТИСТИКА СИСТЕМЫ")
+    print(f"{'='*60}")
     
-    print("\n🗄️  Векторное хранилище:")
+    print("\n[STORE] Векторное хранилище:")
     print(f"   Коллекция: {stats['vector_store']['name']}")
     print(f"   Документов: {stats['vector_store']['count']}")
     print(f"   Директория: {stats['vector_store']['persist_directory']}")
     
-    print("\n💾 Кеш:")
+    print("\n[CACHE] Кеш:")
     print(f"   Записей: {stats['cache']['total_entries']}")
     print(f"   Размер БД: {stats['cache']['db_size_mb']:.2f} MB")
     if stats['cache']['oldest_entry']:
@@ -110,12 +110,12 @@ def print_stats(pipeline: RAGPipeline):
     if stats['cache']['newest_entry']:
         print(f"   Последняя запись: {stats['cache']['newest_entry']}")
     
-    print(f"\n🤖 Модель: {stats['model']}")
-    print(f"🔢 top_k: {stats.get('top_k', '—')}, max_tokens: {stats.get('max_tokens', '—')}")
-    print(f"📌 Версия корпуса (кеш): {stats.get('corpus_version', '—')}")
-    mode_label = "LLM" if stats.get("mode") == "API" else stats.get("mode", "—")
-    print(f"🌐 Режим: {mode_label}")
-    print(f"{'═'*60}\n")
+    print(f"\n[MODEL] Модель: {stats['model']}")
+    print(f"[CFG] top_k: {stats.get('top_k', '-')}, max_tokens: {stats.get('max_tokens', '-')}")
+    print(f"[CFG] Версия корпуса (кеш): {stats.get('corpus_version', '-')}")
+    mode_label = "LLM" if stats.get("mode") == "API" else stats.get("mode", "-")
+    print(f"[MODE] Режим: {mode_label}")
+    print(f"{'='*60}\n")
 
 
 def main():
@@ -133,7 +133,7 @@ def main():
     
     try:
         # Инициализация RAG pipeline
-        print("🚀 Инициализация системы...\n")
+        print("[INIT] Инициализация системы...\n")
         _here = Path(__file__).resolve().parent
         _runtime = _here / "runtime"
         _runtime.mkdir(parents=True, exist_ok=True)
@@ -143,7 +143,7 @@ def main():
             persist_directory=os.getenv("RAG_CHROMA_PATH", str(_runtime / "chroma_db")),
             model=os.getenv("RAG_CHAT_MODEL", "gpt-4o-mini"),
         )
-        print("\n✅ Система готова к работе!\n")
+        print("\n[OK] Система готова к работе!\n")
         
     except Exception as e:
         print(f"❌ Ошибка инициализации: {e}")
@@ -153,11 +153,11 @@ def main():
     while True:
         try:
             # Получение запроса от пользователя
-            user_input = input("💭 Ваш вопрос: ").strip()
+            user_input = input("> Ваш вопрос: ").strip()
             
             # Обработка специальных команд
             if user_input.lower() in ['exit', 'quit', 'q']:
-                print("\n👋 До свидания!")
+                print("\nДо свидания!")
                 break
             
             if user_input.lower() == 'stats':
@@ -165,14 +165,14 @@ def main():
                 continue
             
             if user_input.lower() == 'clear':
-                confirm = input("⚠️  Вы уверены, что хотите очистить кеш? (yes/no): ")
+                confirm = input("[WARN] Вы уверены, что хотите очистить кеш? (yes/no): ")
                 if confirm.lower() in ['yes', 'y', 'да']:
                     pipeline.cache.clear()
-                    print("✅ Кеш очищен")
+                    print("[OK] Кеш очищен")
                 continue
             
             if not user_input:
-                print("⚠️  Пожалуйста, введите вопрос\n")
+                print("[WARN] Пожалуйста, введите вопрос\n")
                 continue
             
             # Обработка запроса через RAG pipeline
@@ -182,7 +182,7 @@ def main():
             print_response(result)
             
         except KeyboardInterrupt:
-            print("\n\n👋 Прервано пользователем. До свидания!")
+            print("\n\nПрервано пользователем. До свидания!")
             break
         except Exception as e:
             print(f"\n❌ Ошибка: {e}\n")
