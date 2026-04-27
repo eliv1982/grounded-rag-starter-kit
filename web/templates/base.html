@@ -6,23 +6,24 @@
   <title>{% block title %}RAG-ассистент{% endblock %}</title>
   <style>
     :root {
-      --bg: #f3f5f9;
-      --card: #ffffff;
-      --text: #1f2937;
-      --muted: #6b7280;
-      --border: #d6dbe6;
-      --primary: #1f4ed8;
-      --primary-hover: #1a3fb0;
-      --error-bg: #fff4f4;
-      --error-border: #f5b7b7;
+      --bg: #FAF7F2;
+      --card: #FFFFFF;
+      --text: #1F2933;
+      --muted: #6B6258;
+      --border: #E7DCCB;
+      --primary: #92400E;
+      --primary-hover: #A16207;
+      --accent-soft: #F3E8D0;
+      --error-bg: #FFF4F1;
+      --error-border: #EFC9BD;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Segoe UI", Arial, sans-serif;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
-      line-height: 1.45;
+      line-height: 1.55;
     }
     .container {
       max-width: 960px;
@@ -32,9 +33,9 @@
     .card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 1.1rem 1.25rem;
-      box-shadow: 0 4px 14px rgba(18, 28, 45, 0.05);
+      border-radius: 16px;
+      padding: 1.15rem 1.25rem;
+      box-shadow: 0 4px 14px rgba(45, 35, 20, 0.06);
       margin-top: 1rem;
     }
     h1, h2, h3 { margin: 0 0 0.6rem; }
@@ -58,8 +59,8 @@
     }
     textarea:focus {
       outline: none;
-      border-color: #7f9cf5;
-      box-shadow: 0 0 0 3px rgba(79, 111, 255, 0.14);
+      border-color: #d2b48c;
+      box-shadow: 0 0 0 3px rgba(146, 64, 14, 0.14);
     }
     button {
       margin-top: 0.8rem;
@@ -73,6 +74,24 @@
       transition: background-color 0.15s ease-in-out;
     }
     button:hover { background: var(--primary-hover); }
+    .hero-subtitle { margin-bottom: 0.75rem; }
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-top: 0.35rem;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.22rem 0.58rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--accent-soft);
+      color: #6f3c0f;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
     .error-card {
       background: var(--error-bg);
       border-color: var(--error-border);
@@ -93,12 +112,12 @@
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 0.7rem 0.8rem;
-      background: #fbfcfe;
+      background: #FFFCF8;
     }
     .source-title {
       font-weight: 700;
       margin-bottom: 0.25rem;
-      color: #1e3a8a;
+      color: #7a3f12;
     }
     .source-meta {
       font-size: 0.9rem;

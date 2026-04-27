@@ -5,8 +5,15 @@
 {% block content %}
 <section class="card">
   <h1>RAG-ассистент</h1>
-  <p>Универсальное RAG-ядро для ассистентов по документам</p>
+  <p class="hero-subtitle">Универсальное RAG-ядро для ассистентов по документам</p>
+  <div class="badge-row">
+    <span class="badge">RAG Core</span>
+    <span class="badge">Source-aware</span>
+    <span class="badge">Local-ready</span>
+  </div>
+</section>
 
+<section class="card">
   <form method="post" action="/ask">
     <label for="question">Вопрос</label>
     <textarea id="question" name="question" placeholder="Задайте вопрос по базе знаний...">{{ question or "" }}</textarea>
