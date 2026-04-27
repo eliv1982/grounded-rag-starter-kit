@@ -1,16 +1,116 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}RAG Assistant{% endblock %}</title>
+  <title>{% block title %}RAG-ассистент{% endblock %}</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 2rem; color: #1f2937; }
-    .container { max-width: 760px; margin: 0 auto; }
-    h1 { margin-bottom: 0.4rem; }
-    p { color: #4b5563; }
-    textarea { width: 100%; min-height: 140px; padding: 0.75rem; }
-    button { margin-top: 0.75rem; padding: 0.6rem 1rem; }
+    :root {
+      --bg: #f3f5f9;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #d6dbe6;
+      --primary: #1f4ed8;
+      --primary-hover: #1a3fb0;
+      --error-bg: #fff4f4;
+      --error-border: #f5b7b7;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    .container {
+      max-width: 960px;
+      margin: 2.5rem auto;
+      padding: 0 1rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.1rem 1.25rem;
+      box-shadow: 0 4px 14px rgba(18, 28, 45, 0.05);
+      margin-top: 1rem;
+    }
+    h1, h2, h3 { margin: 0 0 0.6rem; }
+    p { margin: 0.35rem 0 0.9rem; color: var(--muted); }
+    label {
+      display: inline-block;
+      margin-bottom: 0.35rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    textarea {
+      width: 100%;
+      min-height: 150px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem 0.85rem;
+      resize: vertical;
+      font: inherit;
+      color: var(--text);
+      background: #fff;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: #7f9cf5;
+      box-shadow: 0 0 0 3px rgba(79, 111, 255, 0.14);
+    }
+    button {
+      margin-top: 0.8rem;
+      padding: 0.62rem 1rem;
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      background: var(--primary);
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s ease-in-out;
+    }
+    button:hover { background: var(--primary-hover); }
+    .error-card {
+      background: var(--error-bg);
+      border-color: var(--error-border);
+      color: #7a2323;
+    }
+    .answer-text {
+      color: var(--text);
+      white-space: pre-wrap;
+      margin-top: 0.25rem;
+    }
+    .sources-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 0.75rem;
+      margin-top: 0.6rem;
+    }
+    .source-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.7rem 0.8rem;
+      background: #fbfcfe;
+    }
+    .source-title {
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      color: #1e3a8a;
+    }
+    .source-meta {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 0.25rem;
+    }
+    .source-snippet {
+      font-size: 0.92rem;
+      color: #374151;
+      max-height: 7.2em;
+      overflow: hidden;
+    }
   </style>
 </head>
 <body>

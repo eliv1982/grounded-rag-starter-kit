@@ -1,15 +1,60 @@
 {% extends "base.html" %}
 
-{% block title %}RAG Assistant{% endblock %}
+{% block title %}RAG-ассистент{% endblock %}
 
 {% block content %}
-<h1>RAG Assistant</h1>
-<p>Reusable RAG core for vertical AI assistants</p>
+<section class="card">
+  <h1>RAG-ассистент</h1>
+  <p>Универсальное RAG-ядро для ассистентов по документам</p>
 
-<form method="post" action="#">
-  <label for="question">Question</label>
-  <textarea id="question" name="question" placeholder="Ask a question..."></textarea>
-  <button type="submit">Submit</button>
-</form>
+  <form method="post" action="/ask">
+    <label for="question">Вопрос</label>
+    <textarea id="question" name="question" placeholder="Задайте вопрос по базе знаний...">{{ question or "" }}</textarea>
+    <button type="submit">Отправить</button>
+  </form>
+</section>
+
+{% if error %}
+<section class="card error-card">
+  <strong>Ошибка:</strong> {{ error }}
+</section>
+{% endif %}
+
+{% if answer %}
+<section class="card">
+  <h2>Ответ</h2>
+  <p class="answer-text">{{ answer }}</p>
+</section>
+{% endif %}
+
+{% if context_docs %}
+<section class="card">
+  <h3>Использованные источники</h3>
+  <div class="sources-grid">
+    {% for doc in context_docs %}
+      {% set meta = doc.get("metadata", {}) %}
+      {% set source_label = meta.get("source_display") or meta.get("source") or "Источник" %}
+      {% set source_kind = meta.get("source_kind") %}
+      {% set doc_type = meta.get("doc_type") %}
+      {% set section_heading = meta.get("section_heading") %}
+      {% set snippet = (doc.get("text", "")[:280] ~ ("..." if doc.get("text", "")|length > 280 else "")) %}
+      <article class="source-card">
+        <div class="source-title">{{ source_label }}</div>
+        {% if source_kind or doc_type %}
+          <div class="source-meta">
+            {% if source_kind %}Тип источника: {{ source_kind }}{% endif %}
+            {% if source_kind and doc_type %} | {% endif %}
+            {% if doc_type %}Тип документа: {{ doc_type }}{% endif %}
+          </div>
+        {% endif %}
+        {% if section_heading %}
+          <div class="source-meta">Раздел: {{ section_heading }}</div>
+        {% endif %}
+        <div class="source-snippet">{{ snippet }}</div>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 {% endblock %}
 
