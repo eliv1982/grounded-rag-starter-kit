@@ -9,7 +9,8 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 
-from app_core.generation.prompts import DEFAULT_RAG_SYSTEM_PROMPT, build_rag_prompt
+from app_core.generation.answer_generator import generate_answer
+from app_core.generation.prompts import build_rag_prompt
 from cache import RAGCache
 from llm_client import get_llm_client
 from corpus_config import default_corpus_entries
@@ -98,16 +99,13 @@ class RAGPipeline:
         return build_rag_prompt(query, context_docs)
 
     def _generate_answer(self, prompt: str) -> str:
-        response = self.llm_client.chat.completions.create(
+        return generate_answer(
+            llm_client=self.llm_client,
             model=self.model,
-            messages=[
-                {"role": "system", "content": DEFAULT_RAG_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
+            prompt=prompt,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
-        return response.choices[0].message.content.strip()
 
     def query(self, user_query: str, use_cache: bool = True) -> Dict[str, Any]:
         print(f"\n{'='*60}")
