@@ -6,7 +6,9 @@
 import hashlib
 import json
 import os
+import re
 import sqlite3
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -18,6 +20,26 @@ if _env.exists():
     load_dotenv(_env)
 else:
     load_dotenv()
+
+
+_TRAILING_PUNCT_RE = re.compile(r"[?!.,…:;]+$")
+
+
+def normalize_query_for_cache(query: str) -> str:
+    """
+    Normalize query text for stable cache keys.
+
+    Rules:
+    - Unicode normalize (NFKC)
+    - trim leading/trailing whitespace
+    - collapse repeated internal whitespace
+    - lowercase
+    - remove trailing punctuation (?, !, ., …, :, ;)
+    """
+    normalized = unicodedata.normalize("NFKC", query or "")
+    normalized = " ".join(normalized.strip().split()).lower()
+    normalized = _TRAILING_PUNCT_RE.sub("", normalized).strip()
+    return normalized
 
 
 class RAGCache:
@@ -61,7 +83,7 @@ class RAGCache:
         не отдавать устаревшие ответы при том же тексте вопроса.
         """
         corpus_version = os.getenv("RAG_CORPUS_VERSION", "1")
-        normalized_query = " ".join(query.lower().strip().split())
+        normalized_query = normalize_query_for_cache(query)
         payload = f"{corpus_version}||{normalized_query}"
         return hashlib.sha256(payload.encode()).hexdigest()
 
