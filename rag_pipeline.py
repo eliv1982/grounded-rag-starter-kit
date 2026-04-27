@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 
+from app_core.generation.prompts import DEFAULT_RAG_SYSTEM_PROMPT, build_rag_prompt
 from cache import RAGCache
 from llm_client import get_llm_client
 from corpus_config import default_corpus_entries
@@ -19,18 +20,6 @@ if _env.exists():
     load_dotenv(_env)
 else:
     load_dotenv()
-
-
-LEGAL_RAG_SYSTEM_PROMPT = (
-    "Ты — помощник по юридическим вопросам на основе документов. "
-    "Отвечай строго на основе переданных фрагментов контекста. "
-    "Для каждого существенного тезиса указывай источник из контекста. "
-    "Если данных недостаточно, прямо укажи, что в предоставленных документах недостаточно оснований для вывода. "
-    "Не делай неподтвержденных юридических выводов и не представляй ответ как окончательную юридическую консультацию. "
-    "Четко отделяй факты из источников от осторожных выводов. "
-    "Сохраняй язык ответа пользователя. "
-    "Не придумывай источники, нормы, статьи, дела и цитаты, которых нет в контексте."
-)
 
 
 def _normalize_cached_context(raw: Any) -> Optional[List[Dict[str, Any]]]:
@@ -105,46 +94,14 @@ class RAGPipeline:
 
         print("RAG Pipeline инициализирован")
 
-    def _format_context_block(self, doc: Dict[str, Any], index: int) -> str:
-        meta = doc.get("metadata") or {}
-        src = meta.get("source_display") or meta.get("source") or "источник"
-        kind = meta.get("source_kind", "")
-        heading = meta.get("section_heading", "")
-        head = f"Фрагмент {index} [{src}"
-        if kind:
-            head += f", тип: {kind}"
-        head += "]"
-        if heading:
-            head += f"\nЗаголовок/якорь: {heading}"
-        return f"{head}\n{doc['text']}\n"
-
     def _create_prompt(self, query: str, context_docs: List[Dict[str, Any]]) -> str:
-        parts = [self._format_context_block(d, i) for i, d in enumerate(context_docs, start=1)]
-        context = "\n---\n".join(parts)
-
-        return f"""Ты анализируешь юридический вопрос по предоставленным фрагментам документов.
-
-Фрагменты базы знаний:
-{context}
-
-Вопрос пользователя: {query}
-
-Инструкции:
-- Отвечай только на основе приведённых фрагментов контекста.
-- Для каждого существенного тезиса укажи источник по меткам из фрагментов.
-- Если в предоставленных документах недостаточно оснований для уверенного вывода, прямо так и напиши и укажи, каких данных не хватает.
-- Не делай неподтвержденных юридических выводов и не представляй ответ как окончательное юридическое заключение.
-- Разделяй факты из источников и осторожные выводы/допущения отдельными формулировками.
-- Сохраняй язык ответа пользователя.
-- Не придумывай источники, нормы, статьи, дела и цитаты, которых нет во фрагментах.
-
-Ответ:"""
+        return build_rag_prompt(query, context_docs)
 
     def _generate_answer(self, prompt: str) -> str:
         response = self.llm_client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": LEGAL_RAG_SYSTEM_PROMPT},
+                {"role": "system", "content": DEFAULT_RAG_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
             temperature=self.temperature,
