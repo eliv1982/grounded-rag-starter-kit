@@ -2,8 +2,10 @@
 OpenAI-compatible LLM client factory.
 
 Environment variables:
-- OPENAI_API_KEY
-- OPENAI_BASE_URL (optional)
+- LLM_API_KEY (preferred)
+- LLM_BASE_URL (optional, preferred)
+- OPENAI_API_KEY (legacy fallback)
+- OPENAI_BASE_URL (legacy fallback)
 - OPENAI_TIMEOUT
 - OPENAI_MAX_RETRIES
 """
@@ -15,13 +17,15 @@ from openai import OpenAI
 
 
 def create_llm_client() -> OpenAI:
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = (os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key:
-        raise ValueError("OPENAI_API_KEY не установлен")
+        raise ValueError("LLM_API_KEY/OPENAI_API_KEY не установлен")
 
     timeout = float(os.getenv("OPENAI_TIMEOUT", "180"))
     max_retries = int(os.getenv("OPENAI_MAX_RETRIES", "5"))
-    base_url: Optional[str] = (os.getenv("OPENAI_BASE_URL") or "").strip() or None
+    base_url: Optional[str] = (
+        os.getenv("LLM_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
+    ).strip() or None
 
     kwargs = {
         "api_key": api_key,

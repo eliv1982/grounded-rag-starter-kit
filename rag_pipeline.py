@@ -55,8 +55,9 @@ class RAGPipeline:
         data_file: Optional[str] = None,
         model: Optional[str] = None,
     ):
-        if not os.getenv("OPENAI_API_KEY"):
-            raise ValueError("OPENAI_API_KEY не установлен")
+        api_key = (os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
+        if not api_key:
+            raise ValueError("LLM_API_KEY/OPENAI_API_KEY не установлен")
 
         self._base_dir = Path(__file__).resolve().parent
         self._runtime_dir = self._base_dir / "runtime"

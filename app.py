@@ -122,13 +122,14 @@ def main():
     """Главная функция приложения."""
     print_banner()
     
-    # Проверка наличия API ключа
-    if not os.getenv("OPENAI_API_KEY"):
-        print("❌ Ошибка: переменная окружения OPENAI_API_KEY не установлена")
+    # Проверка наличия API ключа (neutral-first, legacy fallback)
+    if not ((os.getenv("LLM_API_KEY") or "").strip() or (os.getenv("OPENAI_API_KEY") or "").strip()):
+        print("❌ Ошибка: переменная окружения LLM_API_KEY/OPENAI_API_KEY не установлена")
         print("\nУстановите её следующим образом:")
-        print("  Windows (PowerShell): $env:OPENAI_API_KEY='your-key'")
-        print("  Windows (CMD): set OPENAI_API_KEY=your-key")
-        print("  Linux/Mac: export OPENAI_API_KEY='your-key'")
+        print("  Windows (PowerShell): $env:LLM_API_KEY='your-key'")
+        print("  Windows (CMD): set LLM_API_KEY=your-key")
+        print("  Linux/Mac: export LLM_API_KEY='your-key'")
+        print("  Legacy fallback: OPENAI_API_KEY также поддерживается")
         sys.exit(1)
     
     try:
