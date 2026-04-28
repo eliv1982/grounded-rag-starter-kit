@@ -16,3 +16,4 @@ vector_store/
 .vscode/
 
 data/
+runtime/
