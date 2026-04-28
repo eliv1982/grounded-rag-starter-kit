@@ -4,6 +4,7 @@
 """
 
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -63,7 +64,14 @@ class RAGPipeline:
         self._runtime_dir = self._base_dir / "runtime"
         self._runtime_dir.mkdir(parents=True, exist_ok=True)
         self.model = model or os.getenv("RAG_CHAT_MODEL", "gpt-4o-mini")
-        self.top_k = int(os.getenv("RAG_TOP_K", "5"))
+        # Backward compatible:
+        # - RAG_TOP_K keeps legacy meaning for final returned context size
+        # - new knobs control internal quality pass
+        # Raw retrieval defaults to 10 independently from legacy RAG_TOP_K.
+        self.raw_top_k = int(os.getenv("RAG_RAW_TOP_K", "10"))
+        self.max_distance = float(os.getenv("RAG_MAX_DISTANCE", "0.44"))
+        self.final_top_k = int(os.getenv("RAG_FINAL_TOP_K", os.getenv("RAG_TOP_K", "5")))
+        self.top_k = self.final_top_k
         self.max_tokens = int(os.getenv("RAG_MAX_TOKENS", "1500"))
         self.temperature = float(os.getenv("RAG_TEMPERATURE", "0.3"))
 
@@ -95,6 +103,58 @@ class RAGPipeline:
         self.cache = RAGCache(db_path=cache_db_path)
 
         print("RAG Pipeline инициализирован")
+
+    @staticmethod
+    def _normalize_section_heading(heading: str) -> str:
+        # Normalize heading for stable dedup keys across formatting variants.
+        compact = re.sub(r"\s+", " ", (heading or "").strip())
+        return compact.lower()
+
+    def _dedup_key(self, doc: Dict[str, Any]) -> str:
+        meta = doc.get("metadata") or {}
+        source = (meta.get("source") or "").strip()
+        source_display = (meta.get("source_display") or "").strip()
+        source_key = source or source_display or "unknown_source"
+        heading = self._normalize_section_heading(str(meta.get("section_heading") or ""))
+        if heading:
+            return f"{source_key}::{heading}"
+        return source_key
+
+    def _apply_retrieval_quality_pass(self, docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not docs:
+            return []
+
+        # 1) soft cutoff
+        after_cutoff = [
+            d
+            for d in docs
+            if d.get("distance") is not None and float(d["distance"]) <= self.max_distance
+        ]
+
+        # 2) dedup by source + normalized heading (or source only if heading absent)
+        deduped: List[Dict[str, Any]] = []
+        seen = set()
+        for doc in after_cutoff:
+            key = self._dedup_key(doc)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(doc)
+
+        # 3) guarded fallback:
+        # - only when cutoff returned at least one document
+        # - only when after cutoff+dedup we have exactly one document
+        if len(after_cutoff) > 0 and len(deduped) == 1:
+            used_ids = {d.get("id") for d in deduped}
+            for doc in docs:
+                if doc.get("id") in used_ids:
+                    continue
+                deduped.append(doc)
+                if len(deduped) >= 3:  # one kept + up to 2 fallback docs
+                    break
+
+        # 4) final clamp
+        return deduped[: max(1, self.final_top_k)]
 
     def _create_prompt(self, query: str, context_docs: List[Dict[str, Any]]) -> str:
         return build_rag_prompt(query, context_docs)
@@ -129,8 +189,12 @@ class RAGPipeline:
             print("[-] Ответ не найден в кеше")
 
         print("[*] Поиск релевантных документов...")
-        context_docs = self.vector_store.search(user_query, top_k=self.top_k)
-        print(f"[+] Найдено {len(context_docs)} релевантных документов")
+        raw_docs = self.vector_store.search(user_query, top_k=self.raw_top_k)
+        context_docs = self._apply_retrieval_quality_pass(raw_docs)
+        print(
+            f"[+] Найдено {len(context_docs)} релевантных документов "
+            f"(raw={len(raw_docs)}, cutoff<={self.max_distance}, final_top_k={self.final_top_k})"
+        )
 
         print("[*] Формирование промпта...")
         prompt = self._create_prompt(user_query, context_docs)
@@ -167,7 +231,9 @@ class RAGPipeline:
             "cache": self.cache.get_stats(),
             "model": self.model,
             "mode": "API",
-            "top_k": self.top_k,
+            "top_k": self.final_top_k,
+            "raw_top_k": self.raw_top_k,
+            "max_distance": self.max_distance,
             "max_tokens": self.max_tokens,
             "corpus_version": os.getenv("RAG_CORPUS_VERSION", "1"),
         }
