@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app_core.cache.storage import RAGCache
-from app_core.config.knowledge import default_corpus_entries, default_profile
+from app_core.config.knowledge import default_corpus_entries, default_persist_directory, default_profile
 from app_core.config.profile import DEFAULT_PROFILE, DomainProfile
 from app_core.generation.answer_generator import generate_answer
 from app_core.generation.prompts import build_insufficient_basis_answer, build_rag_prompt
@@ -107,7 +107,7 @@ class RAGPipeline:
         self.llm_client = get_llm_client()
 
         if persist_directory is None:
-            persist_directory = os.getenv("RAG_CHROMA_PATH", str(self._runtime_dir / "chroma_db"))
+            persist_directory = default_persist_directory()
         if cache_db_path is None:
             cache_db_path = str(self._runtime_dir / "rag_cache.db")
 

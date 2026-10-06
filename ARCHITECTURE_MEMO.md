@@ -69,7 +69,7 @@ Hosted OpenAI, a gateway or a local runtime such as Ollama are all "an endpoint"
 that API shape. `OPENAI_TIMEOUT`, `OPENAI_MAX_RETRIES` and `OPENAI_EMBED_RETRIES` keep their historical names.
 
 A Chroma index is bound to the embedding model that built it: model, endpoint, corpus fingerprint, chunking settings and
-profile are recorded in the index manifest and checked at every start (see README, "Жизненный цикл векторного индекса").
+profile are recorded in the index manifest and checked at every start (see README, "Кеш и жизненный цикл индекса").
 
 ## Grounding and safety stance
 
@@ -84,8 +84,11 @@ information, not legal advice, professional review for material decisions) come 
 - one vector store (Chroma), pure vector retrieval: no reranking, no hybrid/keyword search;
 - distance cutoff is a fixed heuristic per embedding model, not calibrated automatically;
 - plain text (UTF-8) corpus only; no PDF/DOCX ingestion;
+- the built-in deterministic language behavior (insufficient-basis answer, prompt headings and instructions) supports
+  Russian and English only: a question containing Cyrillic is treated as Russian, anything else as English, so
+  other-language verticals fall back to English unless this is extended;
 - single-process web UI, no authentication, no multi-user support, no rate limiting;
-- Chroma, the SQLite cache and the logs are plaintext local files; hosted mode sends data to the provider (README, "Приватность");
+- Chroma, the SQLite cache and the logs are plaintext local files; hosted mode sends data to the provider (README, "Приватность и поток данных");
 - evaluation is optional and manual (LLM judge), not a CI gate; the offline tests cover the deterministic behavior only;
 - the legal demo's source texts are private and not in the repository.
 

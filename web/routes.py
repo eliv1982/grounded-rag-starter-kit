@@ -67,6 +67,7 @@ def index(request: Request):
             "source_cards": [],
             "error": "",
             "from_cache": None,
+            "insufficient_basis": False,
             "model": "",
             "cached_at": "",
         },
@@ -84,6 +85,7 @@ def ask(request: Request, question: str = Form(default="")):
     context_docs: List[Dict[str, Any]] = []
     error = ""
     from_cache = None
+    insufficient_basis = False
     model = ""
     cached_at = ""
     normalized_question = question.strip()
@@ -96,6 +98,7 @@ def ask(request: Request, question: str = Form(default="")):
             answer = result.get("answer", "")
             context_docs = result.get("context_docs") or []
             from_cache = result.get("from_cache")
+            insufficient_basis = bool(result.get("insufficient_basis"))
             model = result.get("model", "")
             cached_at = result.get("cached_at", "")
         except Exception as exc:
@@ -110,6 +113,7 @@ def ask(request: Request, question: str = Form(default="")):
             "source_cards": source_cards(context_docs),
             "error": error,
             "from_cache": from_cache,
+            "insufficient_basis": insufficient_basis,
             "model": model,
             "cached_at": cached_at,
         },

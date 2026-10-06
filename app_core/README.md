@@ -8,7 +8,7 @@ a vertical supplies **data** (a corpus manifest and an optional `DomainProfile`)
 | Module | Responsibility |
 | --- | --- |
 | `config/env.py` | Repository-local `.env` loading (entry points call it; importing never loads anything). |
-| `config/knowledge.py` | Corpus manifest (`RAG_CORPUS_CONFIG`) loading, the optional `"profile"` object, canonical collection name. |
+| `config/knowledge.py` | Corpus manifest (`RAG_CORPUS_CONFIG`) loading, the optional `"profile"` object, canonical collection name and Chroma directory (`RAG_CHROMA_PATH`, relative to the repo root). |
 | `config/profile.py` | `DomainProfile`: the one small object a vertical fills in (see below). |
 | `llm/client.py` | OpenAI-compatible client factory (hosted or local endpoint; chat and embeddings share it). |
 | `retrieval/vector_store.py` | Chroma persistence: chunking, hard chunk-size limit, embedding, index manifest, search. |

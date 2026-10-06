@@ -543,12 +543,12 @@ class VectorStore:
         cause = getattr(exc, "__cause__", None) or getattr(exc, "__context__", None)
         tail = f" Детали: {cause}" if cause else ""
         return (
-            "Не удалось связаться с API OpenAI (Connection error / таймаут). "
-            "Проверьте интернет, VPN (если API недоступен из вашей сети), файрвол и корпоративный прокси. "
-            "Для прокси задайте HTTPS_PROXY в системе или в PowerShell: "
-            "$env:HTTPS_PROXY='http://127.0.0.1:ПОРТ'. "
-            "Можно увеличить OPENAI_TIMEOUT (сек) и уменьшить RAG_EMBED_BATCH_SIZE. "
-            "При использовании зеркала/шлюза укажите OPENAI_BASE_URL."
+            "Не удалось получить эмбеддинги от настроенного OpenAI-совместимого endpoint (ошибка соединения или таймаут). "
+            "Проверьте, что LLM_BASE_URL указывает на доступный endpoint (для локального Ollama, например, "
+            "http://localhost:11434/v1, и что Ollama запущен), что endpoint поддерживает эмбеддинги и что "
+            "RAG_EMBEDDING_MODEL ему доступна. Для внешнего endpoint проверьте также сеть, файрвол и прокси "
+            "(переменная окружения HTTPS_PROXY). "
+            "Можно увеличить OPENAI_TIMEOUT (сек) и уменьшить RAG_EMBED_BATCH_SIZE."
             + tail
         )
 

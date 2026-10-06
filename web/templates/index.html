@@ -31,7 +31,9 @@
 <section class="card">
   <h2>Ответ</h2>
   <div class="answer-meta">
-    {% if from_cache %}
+    {% if insufficient_basis %}
+      <span class="answer-badge">Недостаточно подходящих источников — модель не вызывалась</span>
+    {% elif from_cache %}
       <span class="answer-badge">Ответ из кэша</span>
     {% else %}
       <span class="answer-badge">Сгенерировано моделью</span>

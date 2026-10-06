@@ -33,10 +33,17 @@ def _doc(i, body, *, header=HEADER, header_len="auto", label=None, heading="Head
 def render(monkeypatch):
     """POST /ask against the real app with a pipeline stub that returns the given context documents."""
 
-    def _render(docs):
+    def _render(docs, **result):
         class Stub:
             def query(self, question):
-                return {"answer": "the answer", "context_docs": docs, "from_cache": False, "model": "m", "cached_at": ""}
+                return {
+                    "answer": "the answer",
+                    "context_docs": docs,
+                    "from_cache": False,
+                    "model": "m",
+                    "cached_at": "",
+                    **result,
+                }
 
         monkeypatch.setattr(web_app, "load_repo_env", lambda *a, **k: False)
         monkeypatch.setattr(web_app, "RAGPipeline", Stub)
@@ -74,6 +81,19 @@ def test_wording_describes_retrieved_context_not_verified_citations(render):
 
 def test_no_context_section_without_context(render):
     assert "Извлечённые фрагменты" not in render([])
+
+
+def test_zero_evidence_answer_is_not_labelled_as_model_generated(render):
+    # The pipeline answers without calling the model when nothing qualifies (rag_pipeline.query).
+    page = render([], answer="Недостаточно данных.", model="", insufficient_basis=True)
+
+    assert "Недостаточно подходящих источников — модель не вызывалась" in page
+    assert "Сгенерировано моделью" not in page and "Ответ из кэша" not in page
+
+    ordinary = render([_doc(1, "Body.")], insufficient_basis=False)
+
+    assert "Сгенерировано моделью" in ordinary
+    assert "модель не вызывалась" not in ordinary
 
 
 def test_internal_chunk_header_is_not_shown_in_the_preview(render):

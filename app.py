@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from app_core.config.env import load_repo_env
+from app_core.config.knowledge import default_persist_directory
 from rag_pipeline import RAGPipeline
 
 
@@ -137,7 +138,7 @@ def main():
         _runtime.mkdir(parents=True, exist_ok=True)
         pipeline = RAGPipeline(
             cache_db_path=str(_runtime / "rag_cache.db"),
-            persist_directory=os.getenv("RAG_CHROMA_PATH", str(_runtime / "chroma_db")),
+            persist_directory=default_persist_directory(),
             model=os.getenv("RAG_CHAT_MODEL", "gpt-4o-mini"),
         )
         print("\n[OK] Система готова к работе!\n")

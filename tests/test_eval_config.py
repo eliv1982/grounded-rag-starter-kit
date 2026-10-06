@@ -4,7 +4,9 @@ Offline tests for the optional evaluation: vertical-owned datasets and an explic
 Nothing here imports RAGAS (the eval stack is optional) and nothing makes a provider call.
 """
 
+import ast
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -13,8 +15,10 @@ from app_core.evaluation.config import (
     JUDGE_API_KEY_ENV,
     JUDGE_BASE_URL_ENV,
     JUDGE_MODEL_ENV,
+    RAGAS_TELEMETRY_ENV,
     EvalConfigError,
     JudgeConfig,
+    apply_privacy_defaults,
     parse_args,
     resolve_judge_config,
 )
@@ -163,6 +167,51 @@ def test_judge_model_precedence(env):
     env.setenv(JUDGE_MODEL_ENV, "judge-m")
     assert resolve_judge_config().model == "judge-m"
     assert resolve_judge_config("cli-m").model == "cli-m"
+
+
+# ---- RAGAS analytics: off unless the user chose otherwise ----
+
+
+@pytest.fixture
+def ragas_env(monkeypatch):
+    # apply_privacy_defaults writes os.environ directly: set-then-delete makes monkeypatch undo whatever it adds.
+    monkeypatch.setenv(RAGAS_TELEMETRY_ENV, "placeholder")
+    monkeypatch.delenv(RAGAS_TELEMETRY_ENV)
+    return monkeypatch
+
+
+@pytest.mark.parametrize("blank", [None, "", "   "])
+def test_ragas_analytics_are_off_by_default_without_touching_the_judge(env, ragas_env, blank):
+    env.setenv("LLM_API_KEY", "local-placeholder")
+    env.setenv("LLM_BASE_URL", LOCAL)
+    if blank is not None:
+        ragas_env.setenv(RAGAS_TELEMETRY_ENV, blank)
+    judge_before = resolve_judge_config()
+
+    apply_privacy_defaults()
+
+    assert os.environ[RAGAS_TELEMETRY_ENV] == "true"
+    assert resolve_judge_config() == judge_before  # the configured judge is neither disabled nor redirected
+
+
+@pytest.mark.parametrize("explicit", ["false", "False", "true", "0"])
+def test_an_explicit_ragas_analytics_choice_is_never_overwritten(ragas_env, explicit):
+    ragas_env.setenv(RAGAS_TELEMETRY_ENV, explicit)
+
+    apply_privacy_defaults()
+
+    assert os.environ[RAGAS_TELEMETRY_ENV] == explicit
+
+
+def test_the_evaluation_entry_point_applies_the_default_after_the_env_file_and_before_ragas_runs():
+    tree = ast.parse((ROOT / "evaluate_ragas.py").read_text(encoding="utf-8"))
+    entry = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "evaluate_rag_system")
+    calls = sorted(
+        ((c.lineno, c.func.id) for c in ast.walk(entry) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)),
+    )
+    order = [name for _, name in calls]
+
+    assert order.index("load_repo_env") < order.index("apply_privacy_defaults") < order.index("evaluate")
 
 
 def test_describe_hides_credentials_and_url_details():

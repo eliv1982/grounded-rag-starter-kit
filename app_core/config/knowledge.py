@@ -43,6 +43,8 @@ KnowledgeEntry = Dict[str, Any]
 CORPUS_CONFIG_ENV = "RAG_CORPUS_CONFIG"
 COLLECTION_NAME_ENV = "RAG_COLLECTION_NAME"
 DEFAULT_COLLECTION_NAME = "rag_collection"
+CHROMA_PATH_ENV = "RAG_CHROMA_PATH"
+DEFAULT_CHROMA_PATH = "runtime/chroma_db"  # relative to the repository root
 
 _REQUIRED_KEYS = ("path", "source", "source_display")
 _OPTIONAL_KEYS = ("source_kind", "doc_type")
@@ -160,3 +162,17 @@ def default_collection_name() -> str:
     evaluation and the scripts all resolve it here, so one corpus never ends up in two collections.
     """
     return (os.getenv(COLLECTION_NAME_ENV) or "").strip() or DEFAULT_COLLECTION_NAME
+
+
+def default_persist_directory() -> str:
+    """
+    Chroma persist directory of the application's index.
+
+    RAG_CHROMA_PATH if set (blank counts as unset), else `runtime/chroma_db`. A relative path is resolved
+    from the repository root, like `.env` and the corpus manifest, so the CLI, the web app and the scripts
+    open the same index wherever they are started from. An absolute path is returned unchanged.
+    """
+    raw = (os.getenv(CHROMA_PATH_ENV) or "").strip()
+    if raw and Path(raw).is_absolute():
+        return raw
+    return str(REPO_ROOT / (raw or DEFAULT_CHROMA_PATH))

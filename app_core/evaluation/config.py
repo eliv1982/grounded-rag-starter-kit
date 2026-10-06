@@ -13,6 +13,8 @@ surprise:
   explicitly and completely: RAG_EVAL_JUDGE_BASE_URL and RAG_EVAL_JUDGE_API_KEY together. The
   application's key is never sent to a judge endpoint it was not issued for.
 * With no judge configured at all, evaluation stops with an explanation before any call is made.
+* RAGAS' own anonymous usage analytics are switched off by default (see `apply_privacy_defaults`):
+  the only connection evaluation makes is to the judge endpoint named above.
 """
 
 import argparse
@@ -27,6 +29,7 @@ JUDGE_BASE_URL_ENV = "RAG_EVAL_JUDGE_BASE_URL"
 JUDGE_API_KEY_ENV = "RAG_EVAL_JUDGE_API_KEY"
 JUDGE_MODEL_ENV = "RAG_EVAL_JUDGE_MODEL"
 DEFAULT_CHAT_MODEL = "gpt-4o-mini"  # same default as the pipeline's RAG_CHAT_MODEL
+RAGAS_TELEMETRY_ENV = "RAGAS_DO_NOT_TRACK"  # RAGAS reads it when it first records an analytics event
 
 
 class EvalConfigError(ValueError):
@@ -48,6 +51,18 @@ class JudgeConfig:
 
 def _env(name: str) -> str:
     return (os.getenv(name) or "").strip()
+
+
+def apply_privacy_defaults() -> None:
+    """
+    Opt out of RAGAS' anonymous usage analytics unless the user has made an explicit choice.
+
+    Call it from the evaluation entry point after the repository `.env` is loaded (so a value set there
+    counts as the user's choice) and before RAGAS runs. An explicit value, even `false`, is never
+    overwritten; a blank value counts as unset. The configured judge itself is not affected.
+    """
+    if not _env(RAGAS_TELEMETRY_ENV):
+        os.environ[RAGAS_TELEMETRY_ENV] = "true"
 
 
 def resolve_judge_config(model_override: Optional[str] = None) -> JudgeConfig:

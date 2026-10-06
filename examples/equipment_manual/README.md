@@ -12,5 +12,5 @@ reusable core needs nothing but data to serve a different domain; it is not a pr
 RAG_CORPUS_CONFIG=examples/equipment_manual/corpus.json
 ```
 
-`tests/test_second_vertical.py` runs this vertical through the unchanged `app_core/` with fake embeddings and a
+`tests/test_verticals.py` runs this vertical through the unchanged `app_core/` with fake embeddings and a
 fake chat model, and checks that nothing from the legal vertical leaks into its chunks or prompts.

@@ -325,6 +325,14 @@ def test_prompt_text_is_pinned_to_prompt_version():
     assert (lifecycle.PROMPT_VERSION, hashlib.sha256(rendered.encode("utf-8")).hexdigest()) == pinned
 
 
+def test_russian_prompt_text_is_pinned_to_prompt_version():
+    """The Russian branch of build_rag_prompt has its own instruction text: it is pinned like the English one."""
+    docs = [{"text": "Body <b>", "metadata": {"source_display": "Doc", "section_heading": "Head"}}]
+    rendered = f"{DEFAULT_RAG_SYSTEM_PROMPT}\n--\n{build_rag_prompt('Что?', docs)}"
+    pinned = (1, "e8de6d351a2fad602bd761e7d9baf71af8fdc29b84df220109964ec0b0ce85ef")
+    assert (lifecycle.PROMPT_VERSION, hashlib.sha256(rendered.encode("utf-8")).hexdigest()) == pinned
+
+
 # ---- canonical collection name ----
 
 

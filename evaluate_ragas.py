@@ -25,7 +25,13 @@ from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.llms import LangchainLLMWrapper
 
 from app_core.config.env import load_repo_env
-from app_core.evaluation.config import EvalConfigError, JudgeConfig, parse_args, resolve_judge_config
+from app_core.evaluation.config import (
+    EvalConfigError,
+    JudgeConfig,
+    apply_privacy_defaults,
+    parse_args,
+    resolve_judge_config,
+)
 from app_core.evaluation.dataset import EvalDataset, EvalDatasetError, load_eval_dataset
 from rag_pipeline import RAGPipeline
 
@@ -143,6 +149,7 @@ def _print_per_question(result, keys, questions):
 def evaluate_rag_system(argv=None):
     args = parse_args(argv)
     load_repo_env()
+    apply_privacy_defaults()  # after .env, so an explicit RAGAS_DO_NOT_TRACK there still wins
     print("=" * 70)
     print("ОЦЕНКА КАЧЕСТВА RAG-СИСТЕМЫ ЧЕРЕЗ RAGAS (опционально, вручную)")
     print("=" * 70)
