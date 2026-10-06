@@ -10,18 +10,11 @@ Context Utilization — насколько извлечённый контекс
 import math
 import os
 import sys
-from pathlib import Path
 
 from datasets import Dataset
-from dotenv import load_dotenv
 from ragas import evaluate
 
-env_path = Path(__file__).parent.parent / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
-else:
-    load_dotenv()
-
+from app_core.config.env import load_repo_env
 from rag_pipeline import RAGPipeline
 
 # Метрики и run_config (RAGAS 0.2+)
@@ -136,6 +129,7 @@ def _print_per_question(result, keys, questions):
 
 
 def evaluate_rag_system():
+    load_repo_env()
     print("=" * 70)
     print("ОЦЕНКА КАЧЕСТВА RAG-СИСТЕМЫ (API MODE) ЧЕРЕЗ RAGAS")
     print("=" * 70)

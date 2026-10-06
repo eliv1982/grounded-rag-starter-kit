@@ -6,17 +6,8 @@ import os
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
+from app_core.config.env import load_repo_env
 from rag_pipeline import RAGPipeline
-
-# Загрузка переменных окружения из .env файла
-# Ищем .env в корне проекта (на уровень выше)
-env_path = Path(__file__).parent.parent / '.env'
-if env_path.exists():
-    load_dotenv(env_path)
-else:
-    # Пытаемся загрузить из текущей директории
-    load_dotenv()
 
 
 def print_banner():
@@ -120,6 +111,8 @@ def print_stats(pipeline: RAGPipeline):
 
 def main():
     """Главная функция приложения."""
+    # .env из корня репозитория; уже заданные переменные окружения имеют приоритет
+    load_repo_env()
     print_banner()
     
     # Проверка наличия API ключа (neutral-first, legacy fallback)

@@ -1,0 +1,10 @@
+# Optional evaluation stack for evaluate_ragas.py: runtime + RAGAS. Canonical Python: 3.11.
+#   pip install -r requirements-eval.txt -c constraints-py311.txt
+# Not needed to run the app or the tests.
+-r requirements.txt
+
+ragas>=0.4.3,<0.5
+datasets>=5.1,<6
+# ragas imports langchain_community.chat_models.vertexai, which langchain-community 0.4 removed;
+# without this cap pip resolves a combination where `import ragas` fails.
+langchain-community>=0.3.31,<0.4

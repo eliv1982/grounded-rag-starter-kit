@@ -8,20 +8,12 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv
-
 from app_core.generation.answer_generator import generate_answer
 from app_core.generation.prompts import build_rag_prompt
 from cache import RAGCache
 from llm_client import get_llm_client
 from corpus_config import default_corpus_entries
 from vector_store import VectorStore
-
-_env = Path(__file__).resolve().parent / ".env"
-if _env.exists():
-    load_dotenv(_env)
-else:
-    load_dotenv()
 
 
 def _normalize_cached_context(raw: Any) -> Optional[List[Dict[str, Any]]]:
@@ -241,6 +233,10 @@ class RAGPipeline:
 
 if __name__ == "__main__":
     import sys
+
+    from app_core.config.env import load_repo_env
+
+    load_repo_env()
 
     try:
         pipeline = RAGPipeline()

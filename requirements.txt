@@ -1,23 +1,22 @@
-openai>=1.3.0
-chromadb>=0.4.18
-tiktoken>=0.5.1
-numpy>=2.0.0
-pandas>=2.0.0
-datasets>=2.14.0
-sentence-transformers>=2.2.0
-python-dotenv>=1.0.0
-pysbd>=0.3.4
+# Runtime dependencies. Canonical Python: 3.11.
+#
+# Install (exact tested versions, recommended):
+#   pip install -r requirements.txt -c constraints-py311.txt
+#
+# Ranges stay within the lines verified in constraints-py311.txt: the lower bound is the
+# verified release (or its minor line), the upper bound is the next breaking-prone line
+# (next minor for 0.x packages, next major otherwise).
+# Only packages the repository imports or runs directly are listed.
 
-# Совместимые версии для Python 3.11 и RAGAS
-pydantic>=2.0.0,<3.0.0
-langchain>=0.3.0
-langchain-core>=0.3.0
-langchain-openai>=0.2.0
-langchain-community>=0.3.0
-ragas>=0.2.0
-pytest>=7.0.0
-fastapi>=0.110.0
-uvicorn>=0.29.0
-jinja2>=3.1.0
-python-multipart>=0.0.9
+# openai is capped below 3 because the optional RAGAS/LangChain stack requires it.
+openai>=2.54,<3
+chromadb>=1.5.9,<1.6
+python-dotenv>=1.2,<2
+pysbd>=0.3.4,<0.4
 
+# Web UI (`uvicorn web.app:app`); jinja2 and python-multipart are required by
+# Jinja2Templates and Form parsing in web/routes.py.
+fastapi>=0.142.2,<0.143
+uvicorn>=0.54,<0.55
+jinja2>=3.1,<4
+python-multipart>=0.0.32,<0.1

@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (Python 3.11, offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            constraints-py311.txt
+      - name: Install runtime + dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt -c constraints-py311.txt
+      - name: Check dependency consistency
+        run: pip check
+      - name: Compile and import sanity
+        run: |
+          python -m compileall -q app.py rag_pipeline.py evaluate_ragas.py app_core web scripts tests
+          python -c "import app, rag_pipeline, web.app, corpus_config, knowledge_config, cache, vector_store, llm_client, openai_client"
+      - name: Run tests
+        run: pytest -q
+
+  eval-import:
+    name: Optional eval stack imports (Python 3.11)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-eval.txt
+            constraints-py311.txt
+      - name: Install runtime + eval dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-eval.txt -c constraints-py311.txt
+      - name: Check dependency consistency
+        run: pip check
+      - name: Import evaluate_ragas (no evaluation is run)
+        run: python -c "import evaluate_ragas"

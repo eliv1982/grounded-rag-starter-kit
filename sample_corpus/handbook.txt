@@ -1,0 +1,9 @@
+Example Co. Employee Handbook (synthetic sample text about a fictional company)
+
+Working hours. Core working hours at Example Co. are 10:00 to 16:00 on weekdays. Outside core hours, employees may schedule their time flexibly after agreeing the plan with their team lead.
+
+Leave requests. An employee submits a leave request through the internal portal at least ten working days before the planned start date. The team lead approves or declines the request within three working days. Leave that was not requested in advance requires written approval from the department head.
+
+Equipment. Company laptops remain the property of Example Co. An employee returns the laptop, charger and access card to the IT desk within five working days after the last day of employment. Lost equipment must be reported to the IT desk on the same working day.
+
+Remote work. Remote work of up to two days per week is permitted without separate approval. Longer remote periods require a written agreement with the team lead. Employees working remotely must be reachable during core working hours.

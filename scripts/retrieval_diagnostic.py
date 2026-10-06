@@ -12,6 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from app_core.config.env import load_repo_env
 from vector_store import VectorStore
 
 
@@ -24,6 +25,7 @@ def _default_queries() -> List[str]:
 
 
 def main() -> None:
+    load_repo_env()
     parser = argparse.ArgumentParser(description="Run retrieval-only diagnostics.")
     parser.add_argument("--query", action="append", help="Query to inspect (repeatable).")
     parser.add_argument(

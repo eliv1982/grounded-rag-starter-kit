@@ -1,0 +1,18 @@
+{
+  "entries": [
+    {
+      "path": "handbook.txt",
+      "source": "example_handbook",
+      "source_display": "Example Co. Handbook (sample)",
+      "source_kind": "policy",
+      "doc_type": "overview"
+    },
+    {
+      "path": "security_policy.txt",
+      "source": "example_security_policy",
+      "source_display": "Example Co. Security Policy (sample)",
+      "source_kind": "policy",
+      "doc_type": "overview"
+    }
+  ]
+}

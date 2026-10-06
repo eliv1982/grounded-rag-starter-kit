@@ -1,19 +1,33 @@
+# Secrets / local environment (keep the tracked *.example templates)
 .env
+.env.*
+!.env*.example
+
+# Python
 venv/
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.coverage
+*.log
 
-runtime/
+# Local runtime artifacts (vector stores, cache DBs)
+/runtime/
 .cache/
 chroma_db/
 vector_store/
 *.sqlite
 *.db
 
+# Private local corpus material (keep the placeholder files)
+/data/
+raw_sources/*
+!raw_sources/.gitkeep
+knowledge_base/*
+!knowledge_base/.gitkeep
+
+# Editors / OS
 .DS_Store
 .idea/
 .vscode/
-
-data/
-runtime/

@@ -1,0 +1,7 @@
+Example Co. Information Security Policy (synthetic sample text about a fictional company)
+
+Passwords. Passwords for company systems must contain at least twelve characters and must not be reused across systems. Passwords are changed immediately if compromise is suspected.
+
+Incident reporting. Any suspected security incident, such as a lost device or a suspicious email, must be reported to the security team within one working day. Employees should not attempt to investigate an incident on their own.
+
+Data handling. Documents marked confidential may be shared only with colleagues who need them for their work and must not be copied to personal devices or personal cloud storage.

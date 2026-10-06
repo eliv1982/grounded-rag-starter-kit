@@ -1,0 +1,8 @@
+# Tests / development: runtime + pytest. Canonical Python: 3.11.
+#   pip install -r requirements-dev.txt -c constraints-py311.txt
+-r requirements.txt
+
+pytest>=9.1,<10
+# HTTP client used by fastapi.testclient.TestClient (web smoke test); Starlette 1.x
+# prefers httpx2 and deprecates TestClient on plain httpx.
+httpx2>=2.13,<3

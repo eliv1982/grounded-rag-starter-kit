@@ -13,14 +13,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from dotenv import load_dotenv
-
-_env = Path(__file__).resolve().parents[3] / ".env"
-if _env.exists():
-    load_dotenv(_env)
-else:
-    load_dotenv()
-
 
 _TRAILING_PUNCT_RE = re.compile(r"[?!.,…:;]+$")
 

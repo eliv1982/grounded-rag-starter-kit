@@ -10,17 +10,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import chromadb
 import time
-from dotenv import load_dotenv
 from openai import APIConnectionError, APITimeoutError
 
 from openai_client import get_openai_client
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-env_path = PROJECT_ROOT / ".env"
-if env_path.exists():
-    load_dotenv(env_path)
-else:
-    load_dotenv()
 
 _STATUTE_BOUNDARY = re.compile(
     r"(?m)^(?=(?:§\s*\d+(?:\.\d+)?[\.\s]|Статья\s+\d+))"
@@ -314,6 +308,9 @@ class VectorStore:
             print("Документы уже загружены в коллекцию")
             return
 
+        if not corpus_entries:
+            raise ValueError("Не заданы источники корпуса: список corpus_entries пуст")
+
         effective_embed_batch_size = max(1, int(os.getenv("RAG_EMBED_BATCH_SIZE", "16")))
         print(
             "[INFO] Effective config: "
@@ -504,6 +501,10 @@ class VectorStore:
 
 if __name__ == "__main__":
     import sys
+
+    from app_core.config.env import load_repo_env
+
+    load_repo_env()
 
     if not os.getenv("OPENAI_API_KEY"):
         print("Ошибка: установите переменную окружения OPENAI_API_KEY")
