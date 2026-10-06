@@ -1,15 +1,16 @@
-# Architecture Memo — legal-rag-starter-kit
+# Architecture Memo — grounded-rag-starter-kit
 
 This memo describes the code that exists today. Anything that does not exist yet is listed only under
 [Optional future ideas](#optional-future-ideas-not-implemented).
 
 ## Purpose
 
-A **legal-first** RAG starter kit: the demonstration vertical is legal (independent guarantees under Russian law),
-and the technical core underneath it is domain-neutral and reusable. It demonstrates grounded retrieval,
-deterministic evidence selection, cache/index lifecycle integrity, local or hosted OpenAI-compatible execution and
-separable domain profiles. It is a starting point and a portfolio piece, not a product, not a framework and not
-legal advice.
+A reusable RAG starter kit for source-grounded vertical AI assistants. The technical core (`app_core/`) is
+domain-neutral; it demonstrates grounded retrieval, deterministic evidence selection, cache/index lifecycle
+integrity, local or hosted OpenAI-compatible execution and separable domain profiles. Reference verticals are neutral
+synthetic examples (`sample_corpus/`, `examples/equipment_manual/`) and one legal vertical
+(`examples/independent_guarantees/`, independent guarantees under Russian law). It is a starting point and a
+portfolio piece, not a product and not a framework.
 
 ## Core vs vertical
 

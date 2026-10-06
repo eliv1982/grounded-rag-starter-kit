@@ -2,7 +2,7 @@
 
 A tiny **synthetic** corpus for trying the starter kit without private data.
 It describes a fictional company ("Example Co.") and contains no real policies,
-legal text, or personal data. It is not legal advice.
+legal text, or personal data.
 
 To use it, set in `.env` (or the environment):
 
