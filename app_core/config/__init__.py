@@ -1,4 +1,3 @@
 """
-Configuration package for future app_core migration.
+Configuration primitives: .env loading, corpus manifest, domain profile.
 """
-

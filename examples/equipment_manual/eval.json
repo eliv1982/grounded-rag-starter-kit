@@ -1,0 +1,17 @@
+{
+  "name": "equipment_manual",
+  "cases": [
+    {
+      "question": "How often must the boiler be descaled?",
+      "ground_truth": "Every 90 days, or every 60 days when the water hardness is above 12 dH (Procedure 2)."
+    },
+    {
+      "question": "What does error E14 mean and what should be done first?",
+      "ground_truth": "E14 means the water tank is empty or not seated; refill the tank, push it fully into the housing and press the start button (Procedure 4)."
+    },
+    {
+      "question": "When must the water filter cartridge be replaced?",
+      "ground_truth": "Every 3 months or after 600 litres, whichever comes first (Procedure 3)."
+    }
+  ]
+}

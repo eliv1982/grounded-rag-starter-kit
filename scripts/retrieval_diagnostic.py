@@ -6,7 +6,6 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import List
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -14,21 +13,13 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app_core.config.env import load_repo_env
 from app_core.config.knowledge import DEFAULT_COLLECTION_NAME
-from vector_store import VectorStore
-
-
-def _default_queries() -> List[str]:
-    return [
-        "Что такое независимая гарантия согласно материалам базы знаний?",
-        "Какие налоговые последствия возникают при выдаче независимой гарантии?",
-        "Может ли гарант отказать в выплате, если основной договор оспаривается?",
-    ]
+from app_core.retrieval.vector_store import VectorStore
 
 
 def main() -> None:
     load_repo_env()
     parser = argparse.ArgumentParser(description="Run retrieval-only diagnostics.")
-    parser.add_argument("--query", action="append", help="Query to inspect (repeatable).")
+    parser.add_argument("--query", action="append", required=True, help="Query to inspect (repeatable).")
     parser.add_argument(
         "--top-k",
         type=int,
@@ -49,9 +40,9 @@ def main() -> None:
 
     top_k = args.top_k if args.top_k is not None else int(os.getenv("RAG_TOP_K", "5"))
     persist_directory = args.persist_directory or os.getenv("RAG_CHROMA_PATH")
-    queries = args.query or _default_queries()
+    queries = args.query
 
-    vs = VectorStore(collection_name=args.collection, persist_directory=persist_directory)
+    vs =VectorStore(collection_name=args.collection, persist_directory=persist_directory)
 
     print(f"[DIAG] top_k={top_k} collection={vs.collection_name}")
     print(f"[DIAG] persist_directory={vs.persist_directory}")

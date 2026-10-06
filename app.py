@@ -105,6 +105,7 @@ def print_stats(pipeline: RAGPipeline):
     
     print(f"\n[MODEL] Модель: {stats['model']}")
     print(f"[CFG] top_k: {stats.get('top_k', '-')}, max_tokens: {stats.get('max_tokens', '-')}")
+    print(f"[CFG] Профиль вертикали: {stats.get('profile', '-')}")
     print(f"[CFG] Версия корпуса (кеш): {stats.get('corpus_version', '-')}")
     print(f"[CFG] Отпечаток конфигурации (кеш): {stats.get('config_fingerprint', '-')}")
     mode_label = "LLM" if stats.get("mode") == "API" else stats.get("mode", "-")

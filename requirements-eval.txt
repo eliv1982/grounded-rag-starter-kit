@@ -5,6 +5,8 @@
 
 ragas>=0.4.3,<0.5
 datasets>=5.1,<6
+# evaluate_ragas.py builds its judge model from langchain-openai directly (already pulled in by ragas).
+langchain-openai>=1.6,<2
 # ragas imports langchain_community.chat_models.vertexai, which langchain-community 0.4 removed;
 # without this cap pip resolves a combination where `import ragas` fails.
 langchain-community>=0.3.31,<0.4

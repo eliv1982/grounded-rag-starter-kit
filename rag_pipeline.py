@@ -1,21 +1,25 @@
 """
 Основной RAG pipeline для API режима.
 Управляет потоком: запрос -> кеш -> vector search -> LLM -> ответ -> кеш.
+
+Оркестрация поверх app_core. Предметная специализация приходит одним объектом DomainProfile
+(app_core/config/profile.py): по умолчанию из секции "profile" манифеста RAG_CORPUS_CONFIG, либо явно
+параметром `profile`. Без профиля действует нейтральный профиль.
 """
 
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app_core.cache.storage import RAGCache
+from app_core.config.knowledge import default_corpus_entries, default_profile
+from app_core.config.profile import DEFAULT_PROFILE, DomainProfile
 from app_core.generation.answer_generator import generate_answer
 from app_core.generation.prompts import build_insufficient_basis_answer, build_rag_prompt
 from app_core.lifecycle import answer_config_payload, endpoint_identity, fingerprint
-from app_core.llm.client import resolve_base_url
+from app_core.llm.client import get_llm_client, resolve_api_key, resolve_base_url
 from app_core.retrieval.selection import select_context, validate_selection_params
-from cache import RAGCache
-from llm_client import get_llm_client
-from corpus_config import default_corpus_entries
-from vector_store import VectorStore
+from app_core.retrieval.vector_store import VectorStore
 
 
 def _normalize_cached_context(raw: Any) -> Optional[List[Dict[str, Any]]]:
@@ -68,9 +72,9 @@ class RAGPipeline:
         corpus_entries: Optional[List[Dict[str, Any]]] = None,
         data_file: Optional[str] = None,
         model: Optional[str] = None,
+        profile: Optional[DomainProfile] = None,
     ):
-        api_key = (os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
-        if not api_key:
+        if not resolve_api_key():
             raise ValueError("LLM_API_KEY/OPENAI_API_KEY не установлен")
 
         self._base_dir = Path(__file__).resolve().parent
@@ -90,6 +94,16 @@ class RAGPipeline:
         self.max_tokens = int(os.getenv("RAG_MAX_TOKENS", "1500"))
         self.temperature = float(os.getenv("RAG_TEMPERATURE", "0.3"))
 
+        # The corpus manifest is read before any store is opened: a missing or invalid configuration stops
+        # here. Its optional "profile" is the vertical; explicit corpus_entries/data_file mean the caller
+        # supplies the vertical (profile=...) or accepts the neutral default.
+        manifest_entries = None
+        if corpus_entries is None and not data_file:
+            manifest_entries = default_corpus_entries()
+            if profile is None:
+                profile = default_profile()
+        self.profile = profile or DEFAULT_PROFILE
+
         self.llm_client = get_llm_client()
 
         if persist_directory is None:
@@ -101,10 +115,11 @@ class RAGPipeline:
         self.vector_store = VectorStore(
             collection_name=collection_name,
             persist_directory=persist_directory,
+            profile=self.profile,
         )
 
-        # The persisted index is validated against the corpus, embedding and chunking configuration on
-        # every start (and rebuilt if it no longer matches); a non-empty collection is never trusted as is.
+        # The persisted index is validated against the corpus, embedding, chunking and profile configuration
+        # on every start (and rebuilt if it no longer matches); a non-empty collection is never trusted as is.
         if corpus_entries is not None:
             print("Проверка индекса: корпус из нескольких источников...")
             index = self.vector_store.ensure_index(corpus_entries, base_dir=self._base_dir)
@@ -112,8 +127,8 @@ class RAGPipeline:
             print(f"Проверка индекса: документы из {data_file}...")
             index = self.vector_store.load_documents(data_file, base_dir=self._base_dir)
         else:
-            print("Проверка индекса: корпус по умолчанию...")
-            index = self.vector_store.ensure_index(default_corpus_entries(), base_dir=self._base_dir)
+            print(f"Проверка индекса: корпус по умолчанию (профиль '{self.profile.name}')...")
+            index = self.vector_store.ensure_index(manifest_entries, base_dir=self._base_dir)
         self.index_identity = index.identity
 
         # Cached answers are scoped to everything that shapes an answer (see app_core/lifecycle.py).
@@ -126,6 +141,7 @@ class RAGPipeline:
             raw_top_k=self.raw_top_k,
             final_top_k=self.final_top_k,
             max_distance=self.max_distance,
+            system_prompt_extra=self.profile.system_prompt_extra,
         )
         self.answer_fingerprint = fingerprint(self.answer_config)
 
@@ -144,11 +160,14 @@ class RAGPipeline:
             prompt=prompt,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
+            system_prompt_extra=self.profile.system_prompt_extra,
         )
 
     def query(self, user_query: str, use_cache: bool = True) -> Dict[str, Any]:
+        # The question text itself is deliberately not printed: stdout of a web server ends up in
+        # process logs, and nothing here needs the text, only its size.
         print(f"\n{'='*60}")
-        print(f"Запрос: {user_query}")
+        print(f"Запрос получен ({len(user_query)} симв.)")
         print(f"{'='*60}")
 
         if use_cache:
@@ -225,6 +244,7 @@ class RAGPipeline:
             "cache": self.cache.get_stats(),
             "model": self.model,
             "mode": "API",
+            "profile": self.profile.name,
             "top_k": self.final_top_k,
             "raw_top_k": self.raw_top_k,
             "max_distance": self.max_distance,
@@ -241,14 +261,13 @@ if __name__ == "__main__":
 
     load_repo_env()
 
+    test_queries = sys.argv[1:]
+    if not test_queries:
+        print('Использование: python rag_pipeline.py "вопрос 1" ["вопрос 2" ...]  (корпус из RAG_CORPUS_CONFIG)')
+        sys.exit(2)
+
     try:
         pipeline = RAGPipeline()
-
-        test_queries = [
-            "Какие условия договора прямо указаны в предоставленных документах?",
-            "Какие основания для отказа или ограничения ответственности есть в контексте?",
-            "Какие факты в материалах подтверждены источниками, а какие требуют уточнения?",
-        ]
 
         for query in test_queries:
             result = pipeline.query(query)

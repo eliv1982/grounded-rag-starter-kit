@@ -37,6 +37,7 @@ IDENTITY = dict(
     chunk_size=800,
     chunk_overlap=200,
     min_chunk_len=80,
+    profile_fingerprint="p" * 64,
 )
 ANSWER = dict(
     chat_model="chat-a",
@@ -46,6 +47,7 @@ ANSWER = dict(
     raw_top_k=10,
     final_top_k=5,
     max_distance=0.44,
+    system_prompt_extra="",
 )
 
 
@@ -73,6 +75,7 @@ def test_fingerprint_is_deterministic_and_order_independent():
         {"raw_top_k": 20},
         {"final_top_k": 3},
         {"max_distance": 0.5},
+        {"system_prompt_extra": "Answer as a pirate."},
     ],
     ids=lambda a: next(iter(a)),
 )
@@ -90,6 +93,7 @@ def test_each_answer_setting_changes_the_fingerprint(answer):
         {"chunk_size": 400},
         {"chunk_overlap": 100},
         {"min_chunk_len": 40},
+        {"profile_fingerprint": "q" * 64},
     ],
     ids=lambda i: next(iter(i)),
 )

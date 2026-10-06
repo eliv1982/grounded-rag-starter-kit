@@ -1,8 +1,10 @@
+from app_core.config.profile import DEFAULT_PROFILE
 from app_core.retrieval.vector_store import VectorStore
 
 
 def _make_vs(chunk_size: int = 120, chunk_overlap: int = 30, min_chunk_len: int = 20) -> VectorStore:
     vs = VectorStore.__new__(VectorStore)
+    vs.profile = DEFAULT_PROFILE
     vs.chunk_size = chunk_size
     vs.chunk_overlap = chunk_overlap
     vs.min_chunk_len = min_chunk_len

@@ -50,6 +50,7 @@ class FakeStore:
             chunk_size=800,
             chunk_overlap=200,
             min_chunk_len=80,
+            profile_fingerprint="fake-profile-fingerprint",
         )
         return IndexStatus("reused", identity, 1)
 

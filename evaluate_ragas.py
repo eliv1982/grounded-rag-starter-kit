@@ -1,9 +1,16 @@
 """
-Оценка качества RAG системы через RAGAS для assistant_api.
-Использует OpenAI API для RAG и для метрик RAGAS.
+Опциональная ручная оценка качества RAG через RAGAS.
 
-Эталонные ответы (ground_truth) заданы вручную под фрагменты ГК / URDG в корпусе —
-так Context Precision оценивает ретрив относительно смысла, а не обрезки ответа модели.
+Датасет (вопросы и эталонные ответы) принадлежит вертикали и задаётся явно: --dataset PATH
+(например, examples/equipment_manual/eval.json). Встроенного набора вопросов нет.
+
+Судья RAGAS по умолчанию — тот же endpoint, который настроен для самого приложения (LLM_API_KEY /
+LLM_BASE_URL): локальная конфигурация даёт локального судью и ничего не уходит в hosted OpenAI из-за
+случайно заданного OPENAI_API_KEY. Другой судья включается только явно и полностью: RAG_EVAL_JUDGE_BASE_URL +
+RAG_EVAL_JUDGE_API_KEY (подробнее в app_core/evaluation/config.py). Каждый запуск делает платные/долгие вызовы
+модели-судьи; это не часть CI и не quality gate.
+
+Context Precision оценивает ретрив относительно эталона из датасета, а не обрезки ответа модели.
 Context Utilization — насколько извлечённый контекст полезен для фактического ответа RAG.
 """
 
@@ -12,9 +19,14 @@ import os
 import sys
 
 from datasets import Dataset
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from ragas import evaluate
+from ragas.embeddings import LangchainEmbeddingsWrapper
+from ragas.llms import LangchainLLMWrapper
 
 from app_core.config.env import load_repo_env
+from app_core.evaluation.config import EvalConfigError, JudgeConfig, parse_args, resolve_judge_config
+from app_core.evaluation.dataset import EvalDataset, EvalDatasetError, load_eval_dataset
 from rag_pipeline import RAGPipeline
 
 # Метрики и run_config (RAGAS 0.2+)
@@ -30,25 +42,6 @@ except ImportError:
         from ragas.metrics.collections import faithfulness, context_precision
     except ImportError:
         from ragas.metrics import faithfulness, context_precision
-
-
-# Вопросы по независимым гарантиям (под корпус ГК / URDG / обзор ВС)
-EVALUATION_QUESTIONS = [
-    "В какой срок гарант должен рассмотреть требование бенефициара по независимой гарантии?",
-    "Чем независимая гарантия отличается от поручительства, если гарантию выдало лицо, не указанное в ГК как уполномоченное?",
-    "Может ли гарант отказать бенефициару со ссылкой на нарушения по основному договору?",
-    "Что такое «надлежащее представление» в смысле URDG?",
-    "Какие основания для отказа в удовлетворении требования по независимой гарантии предусмотрены в ГК РФ?",
-]
-
-# Эталонные формулировки по текстам из базы (не дословная цитата, но смысл для метрик с reference)
-EVALUATION_GROUND_TRUTHS = [
-    "По ГК РФ гарант рассматривает требование бенефициара в течение пяти дней со дня, следующего за днём получения требования со всеми приложёнными документами; иным сроком гарантии может быть установлен иной срок, не превышающий тридцати дней (ст. 375 ГК РФ).",
-    "Независимые гарантии выдают банки, иные кредитные организации и иные коммерческие организации; к обязательствам лиц, не указанных среди уполномоченных, применяются правила о договоре поручительства (п. 3 ст. 368 ГК РФ).",
-    "Гарант не вправе ссылаться на нарушения по основному договору против требования бенефициара (п. 2 ст. 370 ГК РФ); отказ допускается по основаниям, в том числе из ст. 376 ГК РФ (несоответствие требования условиям гарантии, просрочка и др.).",
-    "По URDG надлежащее представление по гарантии — это представление, соответствующее условиям гарантии, правилам URDG в согласующейся части и при отсутствии таких положений — международной стандартной практике; надлежащее требование удовлетворяет критериям надлежащего представления (ст. 2 URDG).",
-    "Гарант отказывает при несоответствии требования или документов условиям гарантии либо при подаче по истечении срока гарантии; возможно приостановление платежа до семи дней по основаниям п. 2 ст. 376 ГК РФ; перечень оснований в целом исчерпывающий для отказа (ст. 376 ГК РФ).",
-]
 
 
 def _build_metrics():
@@ -67,10 +60,30 @@ def _metric_keys(metrics):
     return ["faithfulness", "context_precision"]
 
 
-def prepare_dataset(pipeline: RAGPipeline, questions: list) -> Dataset:
-    if len(questions) != len(EVALUATION_GROUND_TRUTHS):
-        raise ValueError("Число вопросов и эталонных ответов не совпадает")
+def build_judge_models(judge: JudgeConfig):
+    """
+    LangChain chat/embedding clients bound to the judge endpoint, wrapped for RAGAS. No request is made here.
 
+    The explicit `llm=` / `embeddings=` also stop RAGAS from creating its own default OpenAI clients.
+    """
+    chat = ChatOpenAI(
+        model=judge.model,
+        base_url=judge.base_url,
+        api_key=judge.api_key,
+        temperature=0,
+        timeout=float(os.getenv("OPENAI_TIMEOUT", "180")),
+        max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "5")),
+    )
+    embeddings = OpenAIEmbeddings(
+        model=os.getenv("RAG_EMBEDDING_MODEL", "text-embedding-3-small"),
+        base_url=judge.base_url,
+        api_key=judge.api_key,
+        check_embedding_ctx_length=False,  # OpenAI-compatible local endpoints do not accept token arrays
+    )
+    return LangchainLLMWrapper(chat), LangchainEmbeddingsWrapper(embeddings)
+
+
+def prepare_dataset(pipeline: RAGPipeline, spec: EvalDataset) -> Dataset:
     questions_list = []
     answers_list = []
     contexts_list = []
@@ -78,18 +91,17 @@ def prepare_dataset(pipeline: RAGPipeline, questions: list) -> Dataset:
 
     print("[*] Получение ответов от RAG системы...\n")
 
-    for i, question in enumerate(questions, 1):
-        print(f"  {i}/{len(questions)}: {question}")
+    for i, case in enumerate(spec.cases, 1):
+        print(f"  {i}/{len(spec.cases)}: {case.question}")
 
-        result = pipeline.query(question, use_cache=False)
+        result = pipeline.query(case.question, use_cache=False)
 
-        questions_list.append(question)
+        questions_list.append(case.question)
         answers_list.append(result["answer"])
-        context_texts = [doc["text"] for doc in result["context_docs"]]
-        contexts_list.append(context_texts)
-        ground_truths_list.append(EVALUATION_GROUND_TRUTHS[i - 1])
+        contexts_list.append([doc["text"] for doc in result["context_docs"]])
+        ground_truths_list.append(case.ground_truth)
 
-        print("     [+] Ответ получен от OpenAI API")
+        print("     [+] Ответ получен")
 
     print()
 
@@ -128,31 +140,38 @@ def _print_per_question(result, keys, questions):
                 print(f"   {label}: не удалось вычислить")
 
 
-def evaluate_rag_system():
+def evaluate_rag_system(argv=None):
+    args = parse_args(argv)
     load_repo_env()
     print("=" * 70)
-    print("ОЦЕНКА КАЧЕСТВА RAG-СИСТЕМЫ (API MODE) ЧЕРЕЗ RAGAS")
+    print("ОЦЕНКА КАЧЕСТВА RAG-СИСТЕМЫ ЧЕРЕЗ RAGAS (опционально, вручную)")
     print("=" * 70)
     print()
 
-    if not os.getenv("OPENAI_API_KEY"):
-        print("[ОШИБКА] OPENAI_API_KEY не установлен")
+    try:
+        spec = load_eval_dataset(args.dataset)
+        judge = resolve_judge_config(args.judge_model)
+    except (EvalDatasetError, EvalConfigError) as e:
+        print(f"[ОШИБКА] {e}")
         sys.exit(1)
 
+    print(f"Датасет: {spec.name} ({len(spec.cases)} вопросов) <- {spec.path}")
+    print(f"Судья RAGAS: {judge.describe()}")
+    print("Вопросы, найденный контекст, ответы и эталоны отправляются этому судье.\n")
+
     metrics_to_use, run_config = _build_metrics()
+    judge_llm, judge_embeddings = build_judge_models(judge)
 
     try:
-        print("[*] Инициализация RAG системы (API mode)...\n")
-        pipeline = RAGPipeline(
-            model=os.getenv("RAG_CHAT_MODEL", "gpt-4o-mini"),
-        )
-        print("\n[OK] RAG система готова к оценке\n")
+        print("[*] Инициализация RAG системы...\n")
+        pipeline = RAGPipeline(model=os.getenv("RAG_CHAT_MODEL", "gpt-4o-mini"))
+        print(f"\n[OK] RAG система готова к оценке (профиль: {pipeline.profile.name})\n")
     except Exception as e:
         print(f"[ОШИБКА] Ошибка инициализации RAG pipeline: {e}")
         sys.exit(1)
 
     print("=" * 70)
-    dataset = prepare_dataset(pipeline, EVALUATION_QUESTIONS)
+    dataset = prepare_dataset(pipeline, spec)
     print("=" * 70)
 
     print("\n[*] Запуск оценки метрик RAGAS...")
@@ -162,7 +181,7 @@ def evaluate_rag_system():
         print("   Метрики: Faithfulness, Context precision (legacy-импорт)")
     print("   (несколько минут: вызовы LLM для метрик)\n")
 
-    eval_kw = {"dataset": dataset, "metrics": metrics_to_use}
+    eval_kw = {"dataset": dataset, "metrics": metrics_to_use, "llm": judge_llm, "embeddings": judge_embeddings}
     if run_config is not None:
         eval_kw["run_config"] = run_config
 
@@ -203,7 +222,7 @@ def evaluate_rag_system():
     print("\n" + "=" * 70)
     print("ДЕТАЛЬНО ПО ВОПРОСАМ")
     print("=" * 70)
-    _print_per_question(result, keys, EVALUATION_QUESTIONS)
+    _print_per_question(result, keys, [case.question for case in spec.cases])
 
     print("\n" + "=" * 70)
     print("[INFO] КАК ЧИТАТЬ МЕТРИКИ")
@@ -212,14 +231,15 @@ def evaluate_rag_system():
 Faithfulness — насколько ответ RAG выводим из переданного контекста (без «галлюцинаций»).
 
 Context precision (с эталоном) — насколько каждый извлечённый фрагмент полезен для ответа,
-согласующегося с заранее заданным эталоном (EVALUATION_GROUND_TRUTHS). Раньше вместо эталона
-использовалась обрезка ответа модели, из‑за чего оценка искажалась.
+согласующегося с эталоном (ground_truth) из датасета.
 
 Context utilization — то же по смыслу, но опорный «ответ» — фактический ответ вашей RAG;
 удобно, когда ответ хороший, а эталон формулирован иначе.
 
-Faithfulness «не удалось вычислить» — чаще всего LLM RAGAS не разбил ответ на тезисы (пустой список);
-повторный запуск или другая модель для метрик может помочь.
+Faithfulness «не удалось вычислить» — чаще всего LLM-судья не разбил ответ на тезисы (пустой список);
+повторный запуск или другая модель-судья (--judge-model) может помочь.
+
+Метрики оценивает LLM-судья: это ориентир для сравнения конфигураций, а не доказательство корректности.
     """)
 
     print("=" * 70)

@@ -11,6 +11,7 @@ from app_core.config.knowledge import (
     default_knowledge_entries,
     load_corpus_config,
 )
+from app_core.config.profile import DEFAULT_PROFILE
 from app_core.retrieval import vector_store as vector_store_module
 from app_core.retrieval.vector_store import VectorStore
 
@@ -38,6 +39,7 @@ def test_sample_manifest_loads_with_existing_files():
 def test_sample_corpus_chunks_are_non_empty_and_within_limit():
     # The original clean-clone failure was "Корпус пуст после нарезки": the sample must chunk.
     vs = VectorStore.__new__(VectorStore)
+    vs.profile = DEFAULT_PROFILE
     vs.chunk_size, vs.chunk_overlap, vs.min_chunk_len = 800, 200, 80
 
     total = 0
@@ -158,7 +160,7 @@ def _install_fake_providers(monkeypatch):
     embeddings, chat = _FakeEmbeddings(), _FakeChat()
     fake_embed_client = SimpleNamespace(embeddings=embeddings)
     fake_llm_client = SimpleNamespace(chat=SimpleNamespace(completions=chat))
-    monkeypatch.setattr(vector_store_module, "get_openai_client", lambda: fake_embed_client)
+    monkeypatch.setattr(vector_store_module, "get_llm_client", lambda: fake_embed_client)
     monkeypatch.setattr(rag_pipeline, "get_llm_client", lambda: fake_llm_client)
     monkeypatch.setenv("LLM_API_KEY", "test-placeholder")
     return embeddings, chat

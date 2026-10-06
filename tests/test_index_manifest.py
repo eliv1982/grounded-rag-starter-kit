@@ -8,6 +8,7 @@ import chromadb
 import pytest
 from chromadb.api.models.Collection import Collection
 
+from app_core.lifecycle import INDEX_MANIFEST_VERSION
 from app_core.retrieval.vector_store import IndexBuildError, VectorStore
 
 
@@ -45,7 +46,7 @@ def test_fresh_store_ingests_and_writes_a_complete_manifest(index_env, fake_embe
     manifest = _manifest(chroma_dir)
     assert manifest["state"] == "complete"
     assert manifest["chunk_count"] == status.chunk_count
-    assert manifest["manifest_version"] == 1
+    assert manifest["manifest_version"] == INDEX_MANIFEST_VERSION
     assert manifest["embedding_model"] == "embed-a"
     assert (manifest["chunk_size"], manifest["chunk_overlap"], manifest["min_chunk_len"]) == (400, 80, 30)
     assert manifest["corpus_version"] == "1"
@@ -136,7 +137,10 @@ def test_embedding_provider_base_url_change_rebuilds(index_env, fake_embeddings,
 def test_equivalent_base_url_spelling_does_not_rebuild(index_env, fake_embeddings, corpus, chroma_dir):
     index_env.setenv("LLM_BASE_URL", "https://Gateway.example:443/v1/")
     _store(chroma_dir).ensure_index(corpus.entries)
+    # Legacy-only configuration (no LLM_* variables): OPENAI_BASE_URL is still honoured.
     index_env.delenv("LLM_BASE_URL")
+    index_env.delenv("LLM_API_KEY")
+    index_env.setenv("OPENAI_API_KEY", "legacy-key-not-used")
     index_env.setenv("OPENAI_BASE_URL", "https://gateway.example/v1")
 
     assert _store(chroma_dir).ensure_index(corpus.entries).action == "reused"

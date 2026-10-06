@@ -1,0 +1,22 @@
+{
+  "profile": {
+    "name": "equipment_manual",
+    "system_prompt_extra": "You answer questions about the Aurora X2 espresso machine for service staff. Quote intervals, part names and error codes exactly as written in the fragments, and never suggest a repair step that is not in them.",
+    "section_boundaries": {
+      "manual": "(?m)^(?=Procedure\\s+\\d+\\.)"
+    },
+    "kind_labels": {
+      "service_manual": "service manual"
+    },
+    "chunk_header": "[{kind_label}: {source_display}]\n[Procedure: {heading}]\n\n"
+  },
+  "entries": [
+    {
+      "path": "manual.txt",
+      "source": "aurora_x2_manual",
+      "source_display": "Aurora X2 Service Manual (sample)",
+      "source_kind": "service_manual",
+      "doc_type": "manual"
+    }
+  ]
+}

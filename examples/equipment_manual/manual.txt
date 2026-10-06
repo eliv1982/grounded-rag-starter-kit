@@ -1,0 +1,9 @@
+Aurora X2 Espresso Machine Service Manual (synthetic sample text about a fictional machine)
+
+Procedure 1. Daily cleaning. After the last drink of the day, rinse the portafilter and the group head with hot water. Wipe the steam wand after every use and purge it for two seconds before the next drink.
+
+Procedure 2. Descaling. Descale the boiler every 90 days, or every 60 days when the water hardness is above 12 dH. Use only the manufacturer's descaling solution and run three full rinse cycles afterwards.
+
+Procedure 3. Replacing the water filter. Replace the water filter cartridge every 3 months or after 600 litres, whichever comes first. Flush the new cartridge with one litre of water before the first drink.
+
+Procedure 4. Error E14. Error E14 means the water tank is empty or not seated. Refill the tank, push it fully into the housing and press the start button. If E14 appears again, switch the machine off for ten minutes and contact the service desk.

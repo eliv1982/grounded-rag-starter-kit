@@ -20,6 +20,11 @@ variable (relative paths are resolved from the repository root):
 `path` is relative to the manifest's directory; `path`, `source` and
 `source_display` are required, `source_kind` and `doc_type` are optional.
 
+The manifest may also carry one optional `"profile"` object: the vertical's
+domain profile (system prompt addition, section boundaries, labels, chunk
+header, see `app_core/config/profile.py`). Without it the neutral default
+profile applies. A vertical is therefore one manifest plus its documents.
+
 There is no implicit fallback to a demo corpus: if nothing is configured, or
 the manifest is unusable, a CorpusConfigError describes what to fix.
 A tiny synthetic sample lives in `sample_corpus/corpus.json`.
@@ -28,9 +33,10 @@ A tiny synthetic sample lives in `sample_corpus/corpus.json`.
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Tuple, Union
 
 from app_core.config.env import REPO_ROOT
+from app_core.config.profile import DEFAULT_PROFILE, DomainProfile, ProfileError, profile_from_dict
 
 KnowledgeEntry = Dict[str, Any]
 
@@ -46,13 +52,8 @@ class CorpusConfigError(ValueError):
     """The corpus is not configured, or its manifest is missing/invalid."""
 
 
-def load_corpus_config(config_path: Union[str, Path]) -> List[KnowledgeEntry]:
-    """
-    Read a corpus manifest and return entries with absolute `path` values.
-
-    Raises CorpusConfigError on a missing/unreadable/invalid manifest or when
-    a listed source file does not exist.
-    """
+def _read_manifest(config_path: Union[str, Path]) -> Tuple[Path, Any]:
+    """The manifest's resolved path and parsed JSON; CorpusConfigError if it is missing or unreadable."""
     manifest = Path(config_path)
     if not manifest.is_absolute():
         manifest = REPO_ROOT / manifest
@@ -65,6 +66,33 @@ def load_corpus_config(config_path: Union[str, Path]) -> List[KnowledgeEntry]:
         raise CorpusConfigError(f"Не удалось прочитать конфигурацию корпуса {manifest}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise CorpusConfigError(f"Конфигурация корпуса {manifest} не является корректным JSON: {exc}") from exc
+    return manifest, data
+
+
+def load_profile_config(config_path: Union[str, Path]) -> DomainProfile:
+    """
+    The domain profile of a manifest: its `"profile"` object, or the neutral default if it has none.
+
+    Only the profile is read and validated: the listed source files are not touched.
+    """
+    manifest, data = _read_manifest(config_path)
+    raw = data.get("profile") if isinstance(data, dict) else None
+    if raw is None:
+        return DEFAULT_PROFILE
+    try:
+        return profile_from_dict(raw)
+    except ProfileError as exc:
+        raise CorpusConfigError(f'Конфигурация корпуса {manifest}: некорректный "profile": {exc}') from exc
+
+
+def load_corpus_config(config_path: Union[str, Path]) -> List[KnowledgeEntry]:
+    """
+    Read a corpus manifest and return entries with absolute `path` values.
+
+    Raises CorpusConfigError on a missing/unreadable/invalid manifest or when
+    a listed source file does not exist.
+    """
+    manifest, data = _read_manifest(config_path)
 
     raw_entries = data.get("entries") if isinstance(data, dict) else None
     if not isinstance(raw_entries, list) or not raw_entries:
@@ -116,6 +144,12 @@ def default_corpus_entries() -> List[KnowledgeEntry]:
     Backward-compatible alias for legacy naming.
     """
     return default_knowledge_entries()
+
+
+def default_profile() -> DomainProfile:
+    """The profile of the manifest named by RAG_CORPUS_CONFIG; the neutral default if none is configured."""
+    config_path = (os.getenv(CORPUS_CONFIG_ENV) or "").strip()
+    return load_profile_config(config_path) if config_path else DEFAULT_PROFILE
 
 
 def default_collection_name() -> str:

@@ -47,30 +47,29 @@
 </section>
 {% endif %}
 
-{% if context_docs %}
+{% if source_cards %}
 <section class="card">
-  <h3>Использованные источники</h3>
+  <h3>Извлечённые фрагменты: контекст, переданный модели</h3>
+  <p class="answer-subtle">
+    Это фрагменты, найденные в базе и отобранные в качестве контекста для ответа. Номера совпадают с номерами
+    фрагментов в запросе к модели. Ссылки в тексте ответа формирует сама модель; они не проверяются автоматически,
+    поэтому сверяйте ответ с фрагментами.
+  </p>
   <div class="sources-grid">
-    {% for doc in context_docs %}
-      {% set meta = doc.get("metadata", {}) %}
-      {% set source_label = meta.get("source_display") or meta.get("source") or "Источник" %}
-      {% set source_kind = meta.get("source_kind") %}
-      {% set doc_type = meta.get("doc_type") %}
-      {% set section_heading = meta.get("section_heading") %}
-      {% set snippet = (doc.get("text", "")[:280] ~ ("..." if doc.get("text", "")|length > 280 else "")) %}
+    {% for card in source_cards %}
       <article class="source-card">
-        <div class="source-title">{{ source_label }}</div>
-        {% if source_kind or doc_type %}
+        <div class="source-title">Фрагмент {{ card.number }} · {{ card.label }}</div>
+        {% if card.source_kind or card.doc_type %}
           <div class="source-meta">
-            {% if source_kind %}Тип источника: {{ source_kind }}{% endif %}
-            {% if source_kind and doc_type %} | {% endif %}
-            {% if doc_type %}Тип документа: {{ doc_type }}{% endif %}
+            {% if card.source_kind %}Тип источника: {{ card.source_kind }}{% endif %}
+            {% if card.source_kind and card.doc_type %} | {% endif %}
+            {% if card.doc_type %}Тип документа: {{ card.doc_type }}{% endif %}
           </div>
         {% endif %}
-        {% if section_heading %}
-          <div class="source-meta">Раздел: {{ section_heading }}</div>
+        {% if card.heading %}
+          <div class="source-meta">Раздел: {{ card.heading }}</div>
         {% endif %}
-        <div class="source-snippet">{{ snippet }}</div>
+        <div class="source-snippet">{{ card.snippet }}</div>
       </article>
     {% endfor %}
   </div>

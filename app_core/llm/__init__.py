@@ -1,4 +1,3 @@
 """
-LLM integration package for future app_core migration.
+OpenAI-compatible client factory (hosted or local endpoints).
 """
-

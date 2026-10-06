@@ -1,4 +1,3 @@
 """
-Evaluation package for future app_core migration.
+Optional-evaluation helpers that need no RAGAS: dataset loading and judge configuration.
 """
-

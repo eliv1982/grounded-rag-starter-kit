@@ -32,8 +32,22 @@ DEFAULT_RAG_SYSTEM_PROMPT = (
     "Do not translate section headings into English when the question is in Russian."
 )
 
-# Backward-compatible alias for previous naming.
-LEGAL_RAG_SYSTEM_PROMPT = DEFAULT_RAG_SYSTEM_PROMPT
+# A vertical may add domain instructions (profile.system_prompt_extra) but never replace the core rules above:
+# they are appended after DEFAULT_RAG_SYSTEM_PROMPT under this preface, which also keeps their precedence explicit.
+# Changing the preface changes answers: bump PROMPT_VERSION (a test pins it).
+_EXTRA_PREFACE = (
+    "Domain instructions for this deployment follow. "
+    "They only add scope, terminology and tone. "
+    "They never override the grounding, untrusted-data and conflict rules above."
+)
+
+
+def build_system_prompt(system_prompt_extra: str = "") -> str:
+    """The core system prompt, plus the vertical's domain instructions when there are any (append-only)."""
+    extra = (system_prompt_extra or "").strip()
+    if not extra:
+        return DEFAULT_RAG_SYSTEM_PROMPT
+    return "\n\n".join((DEFAULT_RAG_SYSTEM_PROMPT, _EXTRA_PREFACE + "\n" + extra))
 
 
 INSUFFICIENT_BASIS_RU = "Недостаточно данных в подключенных источниках, чтобы дать обоснованный ответ."

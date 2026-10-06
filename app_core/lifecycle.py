@@ -11,7 +11,7 @@ from source files or Git SHAs.
   CACHE_FINGERPRINT_VERSION     layout of the answer fingerprint payload below
   PROMPT_VERSION                system prompt / fragment prompt format  (app_core/generation/prompts.py)
   RETRIEVAL_SELECTION_VERSION   cutoff / dedup / clamp rules            (app_core/retrieval/selection.py)
-  CHUNKING_VERSION              chunk-building algorithm                (app_core/retrieval/vector_store.py)
+  CHUNKING_VERSION              chunk-building algorithm and chunk layout (app_core/retrieval/vector_store.py)
   INDEX_MANIFEST_VERSION        layout of the index manifest below
 
 Answer fingerprint (`fingerprint(answer_config_payload(...))`, a SHA-256 over canonical JSON;
@@ -20,6 +20,7 @@ it scopes every cached answer):
   versions            CACHE_FINGERPRINT_VERSION, PROMPT_VERSION, RETRIEVAL_SELECTION_VERSION
   chat                model, provider/base-URL identity, temperature, max_tokens
   retrieval           raw top-k, final top-k, max distance
+  profile             SHA-256 of the vertical's system_prompt_extra (app_core/config/profile.py)
   index               the whole index identity below, so anything that changes the
                       stored evidence also changes the answer scope
 
@@ -31,6 +32,8 @@ Index identity (the same fields are stored in the vector index manifest and comp
                       file name) and the SHA-256 of that file's text, in manifest order
   embedding_model, embedding_endpoint
   chunk_size, chunk_overlap, min_chunk_len
+  profile_fingerprint SHA-256 over the profile fields that shape chunks (section boundaries, kind
+                      labels, chunk header, sentence language); the profile name is not part of it
 
 Secrets never enter either structure: API keys are not read here, and a base URL is
 reduced to a one-way identity hash of scheme://host[:port]/path (no user info, query or fragment).
@@ -46,11 +49,11 @@ import math
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 from urllib.parse import urlsplit
 
-CACHE_FINGERPRINT_VERSION = 1
+CACHE_FINGERPRINT_VERSION = 2
 PROMPT_VERSION = 1
 RETRIEVAL_SELECTION_VERSION = 1
-CHUNKING_VERSION = 1
-INDEX_MANIFEST_VERSION = 1
+CHUNKING_VERSION = 2
+INDEX_MANIFEST_VERSION = 2
 
 STATE_COMPLETE = "complete"
 STATE_INCOMPLETE = "incomplete"
@@ -117,6 +120,7 @@ def build_index_identity(
     chunk_size: int,
     chunk_overlap: int,
     min_chunk_len: int,
+    profile_fingerprint: str,
 ) -> Dict[str, Any]:
     """Everything that decides whether an existing index still matches the configuration."""
     return {
@@ -129,6 +133,7 @@ def build_index_identity(
         "chunk_size": int(chunk_size),
         "chunk_overlap": int(chunk_overlap),
         "min_chunk_len": int(min_chunk_len),
+        "profile_fingerprint": profile_fingerprint,
     }
 
 
@@ -148,6 +153,7 @@ def answer_config_payload(
     raw_top_k: int,
     final_top_k: int,
     max_distance: float,
+    system_prompt_extra: str,
 ) -> Dict[str, Any]:
     """The inspectable payload behind the answer fingerprint (no secrets, no runtime paths)."""
     return {
@@ -161,6 +167,7 @@ def answer_config_payload(
         "raw_top_k": int(raw_top_k),
         "final_top_k": int(final_top_k),
         "max_distance": _finite("max_distance", max_distance),
+        "system_prompt_extra_sha256": hashlib.sha256((system_prompt_extra or "").strip().encode("utf-8")).hexdigest(),
         "index": dict(index_identity),
     }
 
@@ -192,6 +199,7 @@ _LABELS = {
     "chunk_size": "chunk size",
     "chunk_overlap": "chunk overlap",
     "min_chunk_len": "minimum chunk length",
+    "profile_fingerprint": "domain profile (chunking rules)",
 }
 # Values that are safe and useful to print; fingerprints and endpoint hashes are not shown.
 _SHOWN = {"chunking_version", "corpus_version", "embedding_model", "chunk_size", "chunk_overlap", "min_chunk_len"}

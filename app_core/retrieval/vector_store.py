@@ -1,6 +1,8 @@
 """
 Модуль работы с векторным хранилищем ChromaDB.
-Загрузка нескольких источников с метаданными, нарезка по статьям (нормативка) и по смыслу (обзоры).
+Загрузка нескольких источников с метаданными и нарезка на чанки. Предметно-зависимое (границы разделов,
+подписи типов источников, заголовок чанка, язык разбиения на предложения) приходит из DomainProfile
+(app_core/config/profile.py); без профиля действует нейтральный профиль по умолчанию.
 """
 
 import hashlib
@@ -8,36 +10,35 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Pattern, Tuple
 
 import chromadb
 import time
+from chromadb.config import Settings as ChromaSettings
 from chromadb.errors import NotFoundError
 from openai import APIConnectionError, APITimeoutError
 
 from app_core.config.knowledge import default_collection_name
+from app_core.config.profile import DEFAULT_PROFILE, DomainProfile
 from app_core.lifecycle import (
     STATE_COMPLETE,
     STATE_INCOMPLETE,
     build_index_identity,
     corpus_fingerprint,
     endpoint_identity,
+    fingerprint,
     index_problems,
     manifest_metadata,
     parse_manifest,
 )
-from app_core.llm.client import resolve_base_url
-from openai_client import get_openai_client
+from app_core.llm.client import get_llm_client, resolve_base_url
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# Persisted indexes depend on how chunks are built (the chunk_size/overlap/min_chunk_len settings are
-# recorded in the index manifest automatically). Bump CHUNKING_VERSION in app_core/lifecycle.py whenever
-# the chunking algorithm below (including the statute splitting) changes, so existing indexes are rebuilt.
-
-_STATUTE_BOUNDARY = re.compile(
-    r"(?m)^(?=(?:§\s*\d+(?:\.\d+)?[\.\s]|Статья\s+\d+))"
-)
+# Persisted indexes depend on how chunks are built. The chunk_size/overlap/min_chunk_len settings and the
+# profile's chunking rules are recorded in the index manifest automatically. Bump CHUNKING_VERSION in
+# app_core/lifecycle.py whenever the chunking algorithm or chunk layout below changes, so existing indexes
+# are rebuilt.
 
 
 class IndexBuildError(RuntimeError):
@@ -63,7 +64,9 @@ class VectorStore:
         self,
         collection_name: Optional[str] = None,
         persist_directory: Optional[str] = None,
+        profile: Optional[DomainProfile] = None,
     ):
+        self.profile = profile or DEFAULT_PROFILE
         self.collection_name = collection_name or default_collection_name()
         collection_name = self.collection_name
         if persist_directory is None:
@@ -71,7 +74,11 @@ class VectorStore:
         self.persist_directory = persist_directory
         Path(self.persist_directory).mkdir(parents=True, exist_ok=True)
 
-        self.client = chromadb.PersistentClient(path=persist_directory)
+        # Chroma's anonymous usage telemetry is on by default; this store must not contact anything but the
+        # configured provider endpoint, so it is switched off explicitly (it carries no document text).
+        self.client = chromadb.PersistentClient(
+            path=persist_directory, settings=ChromaSettings(anonymized_telemetry=False)
+        )
 
         try:
             self.collection = self.client.get_collection(name=collection_name)
@@ -83,7 +90,7 @@ class VectorStore:
             )
             print(f"Создана новая коллекция '{collection_name}'")
 
-        self.openai_client = get_openai_client()
+        self.llm_client = get_llm_client()
         self.embedding_model = os.getenv("RAG_EMBEDDING_MODEL", "text-embedding-3-small")
         # Embeddings go through the same OpenAI-compatible endpoint as chat (configured identity only).
         self.embedding_endpoint = endpoint_identity(resolve_base_url())
@@ -96,7 +103,7 @@ class VectorStore:
         try:
             from pysbd import Segmenter
 
-            segmenter = Segmenter(language="ru", clean=False)
+            segmenter = Segmenter(language=self.profile.sentence_language, clean=False)
             return [s.strip() for s in segmenter.segment(text) if s.strip()]
         except Exception:
             return self._split_sentences_regex(text)
@@ -244,13 +251,16 @@ class VectorStore:
                     continue
                 new_meta = dict(meta)
                 new_meta["hard_split_index"] = str(idx)
+                if idx > 0:
+                    new_meta["header_len"] = "0"  # only the first part still starts with the chunk header
                 out.append((part, new_meta))
 
         return out
 
-    def _split_statute_sections(self, text: str) -> List[str]:
-        parts = _STATUTE_BOUNDARY.split(text)
-        parts = [p.strip() for p in parts if p.strip()]
+    @staticmethod
+    def _split_sections(text: str, boundary: Pattern[str]) -> List[str]:
+        """Split at the profile's section boundaries; text without any boundary stays one section."""
+        parts = [p.strip() for p in boundary.split(text) if p.strip()]
         if len(parts) <= 1:
             stripped = text.strip()
             return [stripped] if stripped else []
@@ -262,12 +272,24 @@ class VectorStore:
             return line[:max_len] + "…"
         return line
 
-    def _kind_label(self, source_kind: str) -> str:
-        return {
-            "law": "закон РФ",
-            "rules": "правила (URDG)",
-            "case_law_summary": "обзор судебной практики",
-        }.get(source_kind, source_kind)
+    def _fit_header(self, source_display: str, source_kind: str, heading: str) -> str:
+        """
+        The chunk header, capped at half the chunk size so the body always keeps a sane budget.
+
+        An over-long header first loses the end of the heading; if the rest of the header alone is still
+        too long (a tiny chunk size, a long source name or template) the chunk gets no header: the
+        source stays available in the chunk metadata.
+        """
+        cap = self.chunk_size // 2
+        header = self.profile.format_header(source_display, source_kind, heading)
+        if len(header) <= cap:
+            return header
+        cut = len(header) - cap + 1  # characters to drop, one of them replaced by the ellipsis
+        if len(heading) > cut:
+            header = self.profile.format_header(source_display, source_kind, heading[: len(heading) - cut] + "…")
+            if len(header) <= cap:
+                return header
+        return ""
 
     def _build_chunks_for_file(
         self,
@@ -279,28 +301,29 @@ class VectorStore:
     ) -> List[Tuple[str, Dict[str, str]]]:
         chunk_size = self.chunk_size
         overlap = self.chunk_overlap
-        kind_label = self._kind_label(source_kind)
-        prefix_template = f"[Источник: {source_display} | {kind_label}]\n[Фрагмент: {{heading}}]\n\n"
 
-        if doc_type == "statute":
-            sections = self._split_statute_sections(text)
+        boundary = self.profile.section_pattern(doc_type)
+        if boundary is not None:
+            sections = self._split_sections(text, boundary)
         else:
             sections = [text.strip()] if text.strip() else []
 
         out: List[Tuple[str, Dict[str, str]]] = []
         for section in sections:
             heading = self._section_heading(section)
-            prefix = prefix_template.format(heading=heading)
+            prefix = self._fit_header(source_display, source_kind, heading)
             max_body_len = max(1, chunk_size - len(prefix))
+            # header_len lets presentation layers show the chunk body without the header boilerplate.
+            base_meta = {
+                "source": source,
+                "source_display": source_display,
+                "source_kind": source_kind,
+                "doc_type": doc_type,
+                "section_heading": heading,
+                "header_len": str(len(prefix)),
+            }
             if len(section) <= chunk_size:
-                meta = {
-                    "source": source,
-                    "source_display": source_display,
-                    "source_kind": source_kind,
-                    "doc_type": doc_type,
-                    "section_heading": heading,
-                    "subchunk_index": "",
-                }
+                meta = {**base_meta, "subchunk_index": ""}
                 for body_part in self._split_oversized_chunk(section, max_body_len, overlap):
                     doc_text = f"{prefix}{body_part}"
                     if len(doc_text) < self.min_chunk_len:
@@ -313,14 +336,7 @@ class VectorStore:
                 body = sub.strip()
                 if len(body) < self.min_chunk_len:
                     continue
-                meta = {
-                    "source": source,
-                    "source_display": source_display,
-                    "source_kind": source_kind,
-                    "doc_type": doc_type,
-                    "section_heading": heading,
-                    "subchunk_index": str(i),
-                }
+                meta = {**base_meta, "subchunk_index": str(i)}
                 for body_part in self._split_oversized_chunk(body, max_body_len, overlap):
                     doc_text = f"{prefix}{body_part}"
                     if len(doc_text) < self.min_chunk_len:
@@ -430,6 +446,7 @@ class VectorStore:
             chunk_size=self.chunk_size,
             chunk_overlap=self.chunk_overlap,
             min_chunk_len=self.min_chunk_len,
+            profile_fingerprint=fingerprint(self.profile.chunking_identity()),
         )
 
         count = self.collection.count()
@@ -546,7 +563,7 @@ class VectorStore:
             last_err: Optional[BaseException] = None
             for attempt in range(embed_retries):
                 try:
-                    response = self.openai_client.embeddings.create(
+                    response = self.llm_client.embeddings.create(
                         input=batch,
                         model=self.embedding_model,
                     )
@@ -577,7 +594,7 @@ class VectorStore:
         return all_emb
 
     def _create_embedding(self, text: str) -> List[float]:
-        response = self.openai_client.embeddings.create(
+        response = self.llm_client.embeddings.create(
             input=text,
             model=self.embedding_model,
         )
@@ -624,18 +641,23 @@ if __name__ == "__main__":
 
     from app_core.config.env import load_repo_env
 
+    from app_core.config.knowledge import default_corpus_entries, default_profile
+    from app_core.llm.client import resolve_api_key
+
     load_repo_env()
 
-    if not os.getenv("OPENAI_API_KEY"):
-        print("Ошибка: установите переменную окружения OPENAI_API_KEY")
+    if not resolve_api_key():
+        print("Ошибка: задайте LLM_API_KEY (или устаревший OPENAI_API_KEY)")
         sys.exit(1)
+    if len(sys.argv) < 2:
+        print('Использование: python -m app_core.retrieval.vector_store "вопрос по корпусу из RAG_CORPUS_CONFIG"')
+        sys.exit(2)
 
-    from corpus_config import default_corpus_entries
-
-    vs = VectorStore(collection_name="test_collection")  # deliberately separate from the app's collection
+    # Deliberately a collection of its own, separate from the app's.
+    vs = VectorStore(collection_name="test_collection", profile=default_profile())
     vs.ensure_index(default_corpus_entries())
 
-    r = vs.search("Когда вступает в силу независимая гарантия?", top_k=4)
+    r = vs.search(" ".join(sys.argv[1:]), top_k=4)
     for i, doc in enumerate(r, 1):
         print(f"\n{i}. {doc['metadata'].get('source_display', '')} | {doc['text'][:180]}…")
 

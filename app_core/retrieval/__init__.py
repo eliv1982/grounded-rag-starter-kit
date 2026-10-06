@@ -1,4 +1,3 @@
 """
-Retrieval package for future app_core migration.
+Vector store (Chroma ingestion and search) and deterministic context selection.
 """
-

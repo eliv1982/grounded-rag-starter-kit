@@ -1,242 +1,100 @@
-# Architecture Memo — Legal RAG Starter Kit
+# Architecture Memo — legal-rag-starter-kit
 
-## Project purpose
+This memo describes the code that exists today. Anything that does not exist yet is listed only under
+[Optional future ideas](#optional-future-ideas-not-implemented).
 
-This project is a reusable RAG core for vertical AI assistants.
+## Purpose
 
-It is not a finished domain-specific legal assistant. It is a shared technical foundation that can be reused by multiple vertical assistants with different corpora, prompts, UI modes and export formats.
+A **legal-first** RAG starter kit: the demonstration vertical is legal (independent guarantees under Russian law),
+and the technical core underneath it is domain-neutral and reusable. It demonstrates grounded retrieval,
+deterministic evidence selection, cache/index lifecycle integrity, local or hosted OpenAI-compatible execution and
+separable domain profiles. It is a starting point and a portfolio piece, not a product, not a framework and not
+legal advice.
 
-Planned vertical assistants:
-1. Cross-Border Contract Risk Assistant
-2. Trade Finance Legal Reference Assistant
+## Core vs vertical
 
-## Core principle
+The core answers *how does the system work?* A vertical answers *what does it know, who is it for, how does it speak?*
 
-The core should be corpus-agnostic and domain-agnostic as much as reasonably possible.
+| Owned by `app_core/` (neutral) | Owned by a vertical (`examples/<name>/`) |
+| --- | --- |
+| client, chunk-limit enforcement, Chroma persistence | corpus documents and the manifest `corpus.json` |
+| retrieval and context selection | the `profile`: section-boundary regexes, source-kind labels, chunk header, sentence language |
+| core grounding / untrusted-data / conflict rules | `system_prompt_extra`: scope, terminology, professional-review language |
+| answer cache, index manifest, fingerprints | evaluation cases (`eval.json`), domain-specific diagnostics |
+| prompt format, insufficient-basis answers | demo behavior and example questions |
 
-The core answers the question:
+The boundary is enforced by `tests/test_core_boundary.py` (no legal vocabulary and no imports of the layers above
+the core) and proven by `tests/test_verticals.py`, which runs a non-legal synthetic vertical
+(`examples/equipment_manual`) and the legal one through the same unchanged `app_core/`.
 
-> How does the system work?
-
-Vertical projects answer the question:
-
-> What does the system know, who is it for, and what product experience does it provide?
-
-## Core responsibilities
-
-The reusable core is responsible for:
-
-- document preprocessing;
-- ingestion and indexing;
-- vector search / retrieval;
-- grounded answer generation;
-- source attribution;
-- source-aware responses;
-- insufficient-basis mode;
-- provider-agnostic LLM access;
-- support for OpenAI-compatible endpoints;
-- support for local/private deployment via Ollama or similar local runtimes;
-- cache management;
-- cache invalidation via corpus version;
-- reusable evaluation pipeline;
-- runtime artifact management.
-
-## Vertical project responsibilities
-
-Domain-specific projects are responsible for:
-
-- specific corpora;
-- domain-specific prompts;
-- synthetic cases;
-- checklists;
-- product positioning;
-- user-facing UX;
-- domain-specific PDF templates;
-- demo scenarios;
-- examples and screenshots.
-
-Domain-specific legal materials must not be hardcoded into the reusable core.
-
-## Target project structure
-
-The target architecture should gradually move toward:
+## Current architecture
 
 ```text
-app_core/
-  config/
-  ingestion/
-  retrieval/
-  generation/
-  evaluation/
-  llm/
-  cache/
-  schemas/
-
-web/
-  templates/
-  static/
-  routes.py
-  app.py
-
-exporters/
-  pdf/
-    templates/
-    pdf_exporter.py
-
-raw_sources/
-knowledge_base/
-runtime/
-scripts/
-tests/
+entry points:  app.py (CLI)   web/app.py + web/routes.py (FastAPI)   evaluate_ragas.py (optional)   scripts/
+                      \                  |                                 /
+                       v                 v                                v
+orchestration:                    rag_pipeline.py  (RAGPipeline)
+                                          |
+                                          v
+core:      app_core/config   llm   retrieval   generation   cache   lifecycle   evaluation
+                          |
+                          v
+data:      RAG_CORPUS_CONFIG manifest (+ optional "profile")  ->  documents
+           runtime/  (Chroma index, SQLite cache; local, gitignored)
 ```
 
-## Interface strategy
+Request flow in `RAGPipeline.query`: cache lookup -> embed the question and search Chroma (`RAG_RAW_TOP_K`) ->
+`select_context` (finite distance <= `RAG_MAX_DISTANCE`, exact-duplicate removal, at most `RAG_FINAL_TOP_K`, never padded) ->
+no qualifying fragment: deterministic insufficient-basis answer, **no LLM call, nothing cached** -> otherwise build the
+prompt (fragments wrapped as untrusted `<retrieved_fragment>` data) -> one chat completion (core system prompt plus the
+vertical's addition) -> cache the answer together with its context.
 
-The CLI can remain as a development and testing interface.
+Root-level `cache.py`, `vector_store.py`, `llm_client.py`, `openai_client.py`, `corpus_config.py` and `knowledge_config.py`
+are thin compatibility wrappers over `app_core`; nothing in `app_core` imports them.
 
-The target primary interface is web-first.
+## The profile (the one extension point)
 
-Preferred direction:
+`DomainProfile` is a small frozen dataclass of plain data (strings and string maps), normally the `"profile"` object of
+the corpus manifest. There are deliberately no plugins, registries or callables to load: a profile cannot run code, and
+because it is data it can be fingerprinted. Chunk-shaping fields enter the **index manifest**, `system_prompt_extra`
+enters the **answer fingerprint**, so changing a profile rebuilds the index or invalidates cached answers without any
+manual version bump. The system prompt is always `core rules + vertical addition`; no API replaces the core rules.
 
-- FastAPI;
-- server-rendered UI;
-- Jinja2 templates;
-- HTMX for lightweight interactivity where useful.
+## Provider strategy
 
-The core should not depend on the web interface.
+One OpenAI-compatible endpoint serves chat **and** embeddings (`LLM_API_KEY`, `LLM_BASE_URL`; legacy `OPENAI_API_KEY`,
+`OPENAI_BASE_URL` still work for legacy-only configurations, and a stale legacy URL cannot redirect a new-style one).
+Hosted OpenAI, a gateway or a local runtime such as Ollama are all "an endpoint"; nothing here is provider-universal beyond
+that API shape. `OPENAI_TIMEOUT`, `OPENAI_MAX_RETRIES` and `OPENAI_EMBED_RETRIES` keep their historical names.
 
-## PDF export strategy
+A Chroma index is bound to the embedding model that built it: model, endpoint, corpus fingerprint, chunking settings and
+profile are recorded in the index manifest and checked at every start (see README, "Жизненный цикл векторного индекса").
 
-PDF export is a separate output layer.
+## Grounding and safety stance
 
-It is not part of the RAG core.
+The assistant is instructed to answer only from the retrieved fragments, treat them as untrusted data, state conflicts and
+state insufficiency. This is prompt-level mitigation, not a guarantee: a model can still ignore instructions, and the
+displayed citations are written by the model and not verified. Domain additions (for the legal vertical: reference
+information, not legal advice, professional review for material decisions) come from the vertical's profile.
 
-Expected flow:
+## Known limitations
 
-```text
-query -> retrieval -> answer / structured result -> PDF export
-```
+- one endpoint for chat and embeddings; no separate embedding provider;
+- one vector store (Chroma), pure vector retrieval: no reranking, no hybrid/keyword search;
+- distance cutoff is a fixed heuristic per embedding model, not calibrated automatically;
+- plain text (UTF-8) corpus only; no PDF/DOCX ingestion;
+- single-process web UI, no authentication, no multi-user support, no rate limiting;
+- Chroma, the SQLite cache and the logs are plaintext local files; hosted mode sends data to the provider (README, "Приватность");
+- evaluation is optional and manual (LLM judge), not a CI gate; the offline tests cover the deterministic behavior only;
+- the legal demo's source texts are private and not in the repository.
 
-The core should provide structured data that exporters can use.
+## Optional future ideas (not implemented)
 
-## LLM provider strategy
+Not part of the current code and not promised: reranking or hybrid retrieval; a separate embedding endpoint/provider;
+structured exports (for example PDF reports) as a layer outside the core; richer web interaction (for example HTMX);
+a calibrated retrieval cutoff per embedding model; ingestion of other file formats; additional verticals.
 
-The project should support at least two execution modes:
+## Hygiene
 
-Chat generation and embeddings are different model responsibilities. The core must keep them separately configurable and swappable.
-
-### Hosted mode
-
-Hosted OpenAI or OpenAI-compatible API.
-
-Typical configuration:
-
-```env
-LLM_API_KEY=...
-LLM_BASE_URL=...
-# Legacy fallback:
-# OPENAI_API_KEY=...
-# OPENAI_BASE_URL=...
-RAG_CHAT_MODEL=...
-RAG_EMBEDDING_MODEL=...
-```
-
-### Local/private mode
-
-Local OpenAI-compatible endpoint, for example via Ollama or similar local runtime.
-
-Typical configuration:
-
-```env
-LLM_API_KEY=local-placeholder
-LLM_BASE_URL=http://localhost:11434/v1
-# Legacy fallback:
-# OPENAI_API_KEY=local-placeholder
-# OPENAI_BASE_URL=http://localhost:11434/v1
-RAG_CHAT_MODEL=...
-RAG_EMBEDDING_MODEL=...
-```
-
-The code should not be hardcoded to a single provider.
-
-## Embedding and vector store compatibility
-
-- The vector store is tied to the embedding model used to create embeddings.
-- One Chroma database should not be reused across different embedding models.
-- Hosted and local modes should use separate `RAG_CHROMA_PATH` values to avoid mixed embedding spaces.
-- If embedding model, corpus, chunking, or preprocessing changes, the project must reindex and bump `RAG_CORPUS_VERSION`.
-
-## Grounding and safety
-
-The assistant must:
-
-- answer based on retrieved context;
-- cite sources when sources are available;
-- distinguish retrieved facts from assumptions;
-- explicitly say when the provided documents are insufficient;
-- avoid unsupported legal conclusions;
-- avoid presenting outputs as final legal advice;
-- recommend professional legal review for material decisions.
-
-## What not to do
-
-Do not:
-
-- hardcode one legal vertical into the core;
-- put synthetic clauses, checklists or domain-specific legal notes into core modules;
-- turn the project into a heavy enterprise framework;
-- over-abstract simple working code;
-- break the existing working CLI while refactoring;
-- move everything at once.
-
-## Data and runtime hygiene
-
-By default, the following should not be committed:
-
-- `.env`;
-- `runtime/`;
-- vector store artifacts;
-- cache DB files;
-- private or confidential source documents.
-
-Teams can explicitly override this rule only with a clear security/compliance reason.
-
-## Configuration layering
-
-Each vertical project should maintain its own configuration layer, including:
-
-- `knowledge_config`;
-- corpus paths;
-- prompt profile;
-- evaluation dataset;
-- export profile;
-- UI labels and product copy.
-
-The reusable core should remain neutral and accept these settings as inputs.
-
-## Current baseline status
-
-The current flat structure is acceptable during migration.
-
-The following files should migrate gradually, in small safe increments:
-
-- `app.py`;
-- `rag_pipeline.py`;
-- `vector_store.py`;
-- `cache.py`;
-- `openai_client.py`;
-- `corpus_config.py`;
-- `evaluate_ragas.py`.
-
-## Migration strategy
-
-Refactoring should happen in small safe increments:
-
-1. Stabilize runtime paths and dependencies.
-2. Neutralize prompts and user-facing wording.
-3. Neutralize corpus configuration.
-4. Introduce provider-agnostic LLM client boundaries.
-5. Move core logic gradually into app_core/.
-6. Add web-first interface.
-7. Add PDF export layer.
-8. Keep evaluation reusable and corpus-specific.
+Not committed: `.env`, `runtime/`, vector stores, cache databases and private source documents (`data/`, `raw_sources/*`,
+`knowledge_base/*`). Do not put domain text, legal notes or vertical prompts in `app_core/`; put them in a vertical.

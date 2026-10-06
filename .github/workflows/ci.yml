@@ -30,7 +30,7 @@ jobs:
         run: pip check
       - name: Compile and import sanity
         run: |
-          python -m compileall -q app.py rag_pipeline.py evaluate_ragas.py app_core web scripts tests
+          python -m compileall -q app.py rag_pipeline.py evaluate_ragas.py app_core web scripts examples tests
           python -c "import app, rag_pipeline, web.app, corpus_config, knowledge_config, cache, vector_store, llm_client, openai_client"
       - name: Run tests
         run: pytest -q
@@ -54,5 +54,7 @@ jobs:
           pip install -r requirements-eval.txt -c constraints-py311.txt
       - name: Check dependency consistency
         run: pip check
-      - name: Import evaluate_ragas (no evaluation is run)
-        run: python -c "import evaluate_ragas"
+      - name: Import evaluate_ragas and show its CLI (no evaluation is run, no provider is called)
+        run: |
+          python -c "import evaluate_ragas"
+          python evaluate_ragas.py --help

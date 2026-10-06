@@ -85,6 +85,16 @@ class FakeLLM:
         return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
 
+@pytest.fixture(scope="session")
+def legal_vocabulary():
+    """Vocabulary that must never appear in the reusable core or in a non-legal vertical."""
+    import re
+
+    return re.compile(
+        r"статья|urdg|закон|гк рф|гарант|statute|legal|юрид|\blaw\b|судеб|бенефициар", re.IGNORECASE
+    )
+
+
 @pytest.fixture
 def lifecycle_env(monkeypatch):
     """Hermetic configuration: no lifecycle-relevant variable leaks in from the developer's shell."""
@@ -98,7 +108,7 @@ def lifecycle_env(monkeypatch):
 def fake_embeddings(lifecycle_env):
     """Route VectorStore embeddings to FakeEmbeddings (real Chroma, no provider)."""
     fake = FakeEmbeddings()
-    lifecycle_env.setattr("app_core.retrieval.vector_store.get_openai_client", lambda: fake)
+    lifecycle_env.setattr("app_core.retrieval.vector_store.get_llm_client", lambda: fake)
     return fake
 
 
@@ -163,3 +173,26 @@ def index_env(fake_embeddings, lifecycle_env):
 def fake_llm_class():
     """The recording chat client class (pytest fixtures are the supported way to share it)."""
     return FakeLLM
+
+
+@pytest.fixture
+def pipeline_factory(index_env, fake_llm_class, chroma_dir, tmp_path):
+    """
+    Build `RAGPipeline`s over a real temporary Chroma index, with fake embeddings and a recording fake
+    chat client. Returns `make(**RAGPipeline kwargs) -> (pipeline, llm)`; cache and index files are shared
+    between calls, so a second call behaves like a restart. A cutoff of 2 lets every fake-vector chunk qualify.
+    """
+    import rag_pipeline
+
+    index_env.setenv("RAG_MAX_DISTANCE", "2")
+    index_env.setenv("RAG_FINAL_TOP_K", "3")
+
+    def make(**kwargs):
+        llm = fake_llm_class()
+        index_env.setattr(rag_pipeline, "get_llm_client", lambda: llm)
+        pipeline = rag_pipeline.RAGPipeline(
+            cache_db_path=str(tmp_path / "cache.db"), persist_directory=chroma_dir, **kwargs
+        )
+        return pipeline, llm
+
+    return make

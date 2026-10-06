@@ -1,19 +1,20 @@
 """
 Read-only production retrieval pipeline simulation.
 
-Selection uses the same canonical `select_context` as the pipeline.
+Selection uses the same canonical `select_context` as the pipeline. Running it embeds its built-in demo
+queries through the configured endpoint (LLM_API_KEY / LLM_BASE_URL) against an existing local index.
 """
 
 from pathlib import Path
 import sys
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app_core.config.env import load_repo_env
 from app_core.retrieval.selection import select_context
-from vector_store import VectorStore
+from app_core.retrieval.vector_store import VectorStore
 
 
 def run() -> None:
@@ -65,4 +66,8 @@ def run() -> None:
 
 
 if __name__ == "__main__":
+    import argparse
+
+    # No options: this only makes `--help` print the description instead of starting a run (which embeds queries).
+    argparse.ArgumentParser(description=__doc__).parse_args()
     run()

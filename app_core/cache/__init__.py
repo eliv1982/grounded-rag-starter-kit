@@ -1,4 +1,3 @@
 """
-Cache package for future app_core migration.
+Answer cache (SQLite), scoped by the answer-configuration fingerprint.
 """
-

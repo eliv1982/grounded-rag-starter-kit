@@ -1,4 +1,18 @@
 {
+  "profile": {
+    "name": "independent_guarantees",
+    "system_prompt_extra": "You answer questions about independent guarantees under Russian law from the retrieved fragments of the Civil Code of the Russian Federation, the URDG rules and Supreme Court practice. Use the terminology of the sources (guarantor, beneficiary, principal, demand, compliant presentation) and cite articles, paragraphs and rule numbers exactly as they appear in the fragments. This is reference information, not legal advice: for any decision with legal consequences say that professional legal review is required.",
+    "section_boundaries": {
+      "statute": "(?m)^(?=(?:§\\s*\\d+(?:\\.\\d+)?[\\.\\s]|Статья\\s+\\d+))"
+    },
+    "kind_labels": {
+      "law": "закон РФ",
+      "rules": "правила (URDG)",
+      "case_law_summary": "обзор судебной практики"
+    },
+    "chunk_header": "[Источник: {source_display} | {kind_label}]\n[Фрагмент: {heading}]\n\n",
+    "sentence_language": "ru"
+  },
   "entries": [
     {
       "path": "../../data/GK_clean.txt",
