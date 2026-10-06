@@ -106,6 +106,7 @@ def print_stats(pipeline: RAGPipeline):
     print(f"\n[MODEL] Модель: {stats['model']}")
     print(f"[CFG] top_k: {stats.get('top_k', '-')}, max_tokens: {stats.get('max_tokens', '-')}")
     print(f"[CFG] Версия корпуса (кеш): {stats.get('corpus_version', '-')}")
+    print(f"[CFG] Отпечаток конфигурации (кеш): {stats.get('config_fingerprint', '-')}")
     mode_label = "LLM" if stats.get("mode") == "API" else stats.get("mode", "-")
     print(f"[MODE] Режим: {mode_label}")
     print(f"{'='*60}\n")
@@ -134,7 +135,6 @@ def main():
         _runtime = _here / "runtime"
         _runtime.mkdir(parents=True, exist_ok=True)
         pipeline = RAGPipeline(
-            collection_name="api_rag_collection",
             cache_db_path=str(_runtime / "rag_cache.db"),
             persist_directory=os.getenv("RAG_CHROMA_PATH", str(_runtime / "chroma_db")),
             model=os.getenv("RAG_CHAT_MODEL", "gpt-4o-mini"),

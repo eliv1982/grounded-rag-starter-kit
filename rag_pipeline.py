@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional
 
 from app_core.generation.answer_generator import generate_answer
 from app_core.generation.prompts import build_insufficient_basis_answer, build_rag_prompt
+from app_core.lifecycle import answer_config_payload, endpoint_identity, fingerprint
+from app_core.llm.client import resolve_base_url
 from app_core.retrieval.selection import select_context, validate_selection_params
 from cache import RAGCache
 from llm_client import get_llm_client
@@ -60,7 +62,7 @@ class RAGPipeline:
 
     def __init__(
         self,
-        collection_name: str = "rag_collection",
+        collection_name: Optional[str] = None,
         cache_db_path: Optional[str] = None,
         persist_directory: Optional[str] = None,
         corpus_entries: Optional[List[Dict[str, Any]]] = None,
@@ -101,19 +103,34 @@ class RAGPipeline:
             persist_directory=persist_directory,
         )
 
-        if self.vector_store.collection.count() == 0:
-            if corpus_entries is not None:
-                print("Загрузка корпуса (несколько источников)...")
-                self.vector_store.load_corpus(corpus_entries, base_dir=self._base_dir)
-            elif data_file:
-                print(f"Загрузка документов из {data_file}...")
-                self.vector_store.load_documents(data_file, base_dir=self._base_dir)
-            else:
-                print("Загрузка корпуса по умолчанию...")
-                self.vector_store.load_corpus(default_corpus_entries(), base_dir=self._base_dir)
+        # The persisted index is validated against the corpus, embedding and chunking configuration on
+        # every start (and rebuilt if it no longer matches); a non-empty collection is never trusted as is.
+        if corpus_entries is not None:
+            print("Проверка индекса: корпус из нескольких источников...")
+            index = self.vector_store.ensure_index(corpus_entries, base_dir=self._base_dir)
+        elif data_file:
+            print(f"Проверка индекса: документы из {data_file}...")
+            index = self.vector_store.load_documents(data_file, base_dir=self._base_dir)
+        else:
+            print("Проверка индекса: корпус по умолчанию...")
+            index = self.vector_store.ensure_index(default_corpus_entries(), base_dir=self._base_dir)
+        self.index_identity = index.identity
+
+        # Cached answers are scoped to everything that shapes an answer (see app_core/lifecycle.py).
+        self.answer_config = answer_config_payload(
+            index_identity=self.index_identity,
+            chat_model=self.model,
+            chat_endpoint=endpoint_identity(resolve_base_url()),
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            raw_top_k=self.raw_top_k,
+            final_top_k=self.final_top_k,
+            max_distance=self.max_distance,
+        )
+        self.answer_fingerprint = fingerprint(self.answer_config)
 
         print("Инициализация кеша...")
-        self.cache = RAGCache(db_path=cache_db_path)
+        self.cache = RAGCache(db_path=cache_db_path, config_fingerprint=self.answer_fingerprint)
 
         print("RAG Pipeline инициализирован")
 
@@ -212,7 +229,8 @@ class RAGPipeline:
             "raw_top_k": self.raw_top_k,
             "max_distance": self.max_distance,
             "max_tokens": self.max_tokens,
-            "corpus_version": os.getenv("RAG_CORPUS_VERSION", "1"),
+            "corpus_version": self.index_identity["corpus_version"],
+            "config_fingerprint": self.answer_fingerprint[:12],
         }
 
 

@@ -35,6 +35,8 @@ from app_core.config.env import REPO_ROOT
 KnowledgeEntry = Dict[str, Any]
 
 CORPUS_CONFIG_ENV = "RAG_CORPUS_CONFIG"
+COLLECTION_NAME_ENV = "RAG_COLLECTION_NAME"
+DEFAULT_COLLECTION_NAME = "rag_collection"
 
 _REQUIRED_KEYS = ("path", "source", "source_display")
 _OPTIONAL_KEYS = ("source_kind", "doc_type")
@@ -114,3 +116,13 @@ def default_corpus_entries() -> List[KnowledgeEntry]:
     Backward-compatible alias for legacy naming.
     """
     return default_knowledge_entries()
+
+
+def default_collection_name() -> str:
+    """
+    Canonical Chroma collection name for the application's index.
+
+    RAG_COLLECTION_NAME if set (blank counts as unset), else `rag_collection`. The CLI, the web app,
+    evaluation and the scripts all resolve it here, so one corpus never ends up in two collections.
+    """
+    return (os.getenv(COLLECTION_NAME_ENV) or "").strip() or DEFAULT_COLLECTION_NAME

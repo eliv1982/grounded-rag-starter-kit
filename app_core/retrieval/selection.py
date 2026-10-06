@@ -18,6 +18,9 @@ Rules, applied in input (rank) order:
 
 There is deliberately no fallback padding: if fewer chunks qualify, fewer are
 returned, and if none qualify the result is empty.
+
+Cached answers depend on these rules: bump RETRIEVAL_SELECTION_VERSION in
+app_core/lifecycle.py whenever they change.
 """
 
 import hashlib

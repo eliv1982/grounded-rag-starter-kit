@@ -16,6 +16,11 @@ from typing import Optional
 from openai import OpenAI
 
 
+def resolve_base_url() -> Optional[str]:
+    """Configured provider base URL (LLM_BASE_URL, legacy OPENAI_BASE_URL), or None for the SDK default."""
+    return (os.getenv("LLM_BASE_URL") or os.getenv("OPENAI_BASE_URL") or "").strip() or None
+
+
 def create_llm_client() -> OpenAI:
     api_key = (os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key:
@@ -23,9 +28,7 @@ def create_llm_client() -> OpenAI:
 
     timeout = float(os.getenv("OPENAI_TIMEOUT", "180"))
     max_retries = int(os.getenv("OPENAI_MAX_RETRIES", "5"))
-    base_url: Optional[str] = (
-        os.getenv("LLM_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
-    ).strip() or None
+    base_url = resolve_base_url()
 
     kwargs = {
         "api_key": api_key,

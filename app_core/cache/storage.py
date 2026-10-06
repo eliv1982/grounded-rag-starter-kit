@@ -16,6 +16,11 @@ from typing import Any, Dict, Optional
 
 _TRAILING_PUNCT_RE = re.compile(r"[?!.,…:;]+$")
 
+# PRAGMA user_version of the cache database. 0 = written before cache keys were scoped by the
+# answer-configuration fingerprint (keys were query + corpus version only); such rows are stale by
+# definition and can never match a new key, so they are dropped once when the file is first opened.
+_DB_VERSION = 1
+
 
 def normalize_query_for_cache(query: str) -> str:
     """
@@ -35,15 +40,24 @@ def normalize_query_for_cache(query: str) -> str:
 
 
 class RAGCache:
-    """Кеш для хранения результатов RAG запросов."""
+    """
+    Кеш для хранения результатов RAG запросов.
 
-    def __init__(self, db_path: str = "rag_cache.db"):
+    Every entry is scoped to `config_fingerprint` (see `app_core.lifecycle.answer_fingerprint`):
+    the same question asked under a different effective configuration is a miss, never a stale hit.
+    """
+
+    def __init__(self, db_path: str = "rag_cache.db", *, config_fingerprint: str):
         """
         Инициализация кеша.
 
         Args:
             db_path: путь к файлу базы данных SQLite
+            config_fingerprint: отпечаток эффективной конфигурации ответа (обязателен)
         """
+        if not isinstance(config_fingerprint, str) or not config_fingerprint.strip():
+            raise ValueError("config_fingerprint must be a non-empty string")
+        self.config_fingerprint = config_fingerprint
         self.db_path = db_path
         db_parent = Path(self.db_path).parent
         if str(db_parent) not in ("", "."):
@@ -65,18 +79,22 @@ class RAGCache:
             )
         """)
 
+        (version,) = cursor.execute("PRAGMA user_version").fetchone()
+        if version < _DB_VERSION:
+            cursor.execute("DELETE FROM cache")
+            cursor.execute(f"PRAGMA user_version = {_DB_VERSION}")
+
         conn.commit()
         conn.close()
 
     def _get_query_hash(self, query: str) -> str:
         """
-        Вычисление хеша запроса для использования как ключ кеша.
-        Версия корпуса RAG_CORPUS_VERSION включается в ключ, чтобы после переиндексации
-        не отдавать устаревшие ответы при том же тексте вопроса.
+        Ключ кеша = SHA-256 от отпечатка конфигурации ответа и нормализованного запроса.
+        Смена модели, провайдера, промпта, retrieval-настроек, корпуса или индекса меняет отпечаток,
+        поэтому ответы, полученные при другой конфигурации, не отдаются.
         """
-        corpus_version = os.getenv("RAG_CORPUS_VERSION", "1")
         normalized_query = normalize_query_for_cache(query)
-        payload = f"{corpus_version}||{normalized_query}"
+        payload = f"{self.config_fingerprint}||{normalized_query}"
         return hashlib.sha256(payload.encode()).hexdigest()
 
     def get(self, query: str) -> Optional[Dict[str, Any]]:
@@ -176,7 +194,7 @@ class RAGCache:
 
 if __name__ == "__main__":
     # Тестирование кеша
-    cache = RAGCache("test_cache.db")
+    cache = RAGCache("test_cache.db", config_fingerprint="selftest")
 
     # Сохранение
     cache.set(

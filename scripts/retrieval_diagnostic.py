@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app_core.config.env import load_repo_env
+from app_core.config.knowledge import DEFAULT_COLLECTION_NAME
 from vector_store import VectorStore
 
 
@@ -36,8 +37,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--collection",
-        default="rag_collection",
-        help="Chroma collection name (default: rag_collection).",
+        default=None,
+        help=f"Chroma collection name (default: RAG_COLLECTION_NAME or {DEFAULT_COLLECTION_NAME}).",
     )
     parser.add_argument(
         "--persist-directory",
@@ -52,7 +53,7 @@ def main() -> None:
 
     vs = VectorStore(collection_name=args.collection, persist_directory=persist_directory)
 
-    print(f"[DIAG] top_k={top_k} collection={args.collection}")
+    print(f"[DIAG] top_k={top_k} collection={vs.collection_name}")
     print(f"[DIAG] persist_directory={vs.persist_directory}")
     print(f"[DIAG] docs_in_collection={vs.collection.count()}")
 

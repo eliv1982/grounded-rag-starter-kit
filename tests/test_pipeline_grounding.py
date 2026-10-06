@@ -11,6 +11,8 @@ import pytest
 
 import rag_pipeline
 from app_core.generation.prompts import INSUFFICIENT_BASIS_EN, INSUFFICIENT_BASIS_RU
+from app_core.lifecycle import build_index_identity
+from app_core.retrieval.vector_store import IndexStatus
 from rag_pipeline import RAGPipeline
 
 _CONFIG_VARS = ("RAG_RAW_TOP_K", "RAG_MAX_DISTANCE", "RAG_FINAL_TOP_K", "RAG_TOP_K")
@@ -36,8 +38,20 @@ class FakeStore:
     def __init__(self, docs):
         self.docs = docs
         self.search_calls = []
-        # Non-empty index, so the pipeline never tries to ingest a corpus; `docs` is what search returns.
+        # `docs` is what search returns; the index lifecycle itself is covered by the index-manifest tests.
         self.collection = SimpleNamespace(count=lambda: 1)
+
+    def ensure_index(self, corpus_entries, base_dir=None):
+        identity = build_index_identity(
+            corpus_version="1",
+            corpus_fingerprint="fake-corpus-fingerprint",
+            embedding_model="fake-embedding-model",
+            embedding_endpoint="default",
+            chunk_size=800,
+            chunk_overlap=200,
+            min_chunk_len=80,
+        )
+        return IndexStatus("reused", identity, 1)
 
     def search(self, query, top_k=5):
         self.search_calls.append((query, top_k))
@@ -58,6 +72,8 @@ def make_pipeline(monkeypatch, tmp_path):
     for name in _CONFIG_VARS:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("LLM_API_KEY", "test-key-not-used")
+    # The pipeline always reads the corpus manifest to validate the index against it.
+    monkeypatch.setenv("RAG_CORPUS_CONFIG", "sample_corpus/corpus.json")
 
     def _make(docs, **env):
         for name, value in env.items():

@@ -144,7 +144,6 @@ def evaluate_rag_system():
     try:
         print("[*] Инициализация RAG системы (API mode)...\n")
         pipeline = RAGPipeline(
-            collection_name="api_rag_collection",
             model=os.getenv("RAG_CHAT_MODEL", "gpt-4o-mini"),
         )
         print("\n[OK] RAG система готова к оценке\n")

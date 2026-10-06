@@ -6,6 +6,8 @@ import html
 import re
 from typing import Any, Dict, List
 
+# Cached answers are scoped to PROMPT_VERSION (app_core/lifecycle.py): bump it whenever the system prompt,
+# the fragment format or build_rag_prompt's instructions change, or old answers will keep being served.
 DEFAULT_RAG_SYSTEM_PROMPT = (
     "You are a source-grounded assistant. "
     "Use only the provided context. "

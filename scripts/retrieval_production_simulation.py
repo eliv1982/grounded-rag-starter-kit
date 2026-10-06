@@ -30,7 +30,7 @@ def run() -> None:
     max_dist = 0.44
     final_top_k = 5
 
-    vs = VectorStore(collection_name="rag_collection", persist_directory="runtime/chroma_db_local_bge_m3")
+    vs = VectorStore(persist_directory="runtime/chroma_db_local_bge_m3")
     print(f"[PROD SIM] raw_top_k={raw_top_k} max_dist={max_dist} final_top_k={final_top_k}")
 
     for q in queries:

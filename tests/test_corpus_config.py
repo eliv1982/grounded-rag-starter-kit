@@ -123,7 +123,7 @@ def test_empty_corpus_entries_do_not_masquerade_as_empty_chunking():
     vs.collection = SimpleNamespace(count=lambda: 0)
 
     with pytest.raises(ValueError, match="corpus_entries") as excinfo:
-        vs.load_corpus([])
+        vs.ensure_index([])
     assert "после нарезки" not in str(excinfo.value)
 
 

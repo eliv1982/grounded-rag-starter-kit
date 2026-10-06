@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app_core.config.env import load_repo_env
+from app_core.config.knowledge import DEFAULT_COLLECTION_NAME
 from vector_store import VectorStore
 
 
@@ -84,7 +85,11 @@ def main() -> None:
     load_repo_env()
     parser = argparse.ArgumentParser(description="Retrieve top_k and estimate distance bands.")
     parser.add_argument("--top-k", type=int, default=10)
-    parser.add_argument("--collection", default="rag_collection")
+    parser.add_argument(
+        "--collection",
+        default=None,
+        help=f"Chroma collection name (default: RAG_COLLECTION_NAME or {DEFAULT_COLLECTION_NAME}).",
+    )
     parser.add_argument("--persist-directory", default=None)
     parser.add_argument("--query", action="append", help="Custom query (repeatable).")
     args = parser.parse_args()
@@ -93,7 +98,7 @@ def main() -> None:
     persist_directory = args.persist_directory or os.getenv("RAG_CHROMA_PATH")
     vs = VectorStore(collection_name=args.collection, persist_directory=persist_directory)
 
-    print(f"[REPORT] top_k={args.top_k} collection={args.collection}")
+    print(f"[REPORT] top_k={args.top_k} collection={vs.collection_name}")
     print(f"[REPORT] persist_directory={vs.persist_directory}")
     print(f"[REPORT] docs_in_collection={vs.collection.count()}")
 

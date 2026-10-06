@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -9,14 +9,14 @@ from rag_pipeline import RAGPipeline
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
-_pipeline: Optional[RAGPipeline] = None
 
 
-def _get_pipeline() -> RAGPipeline:
-    global _pipeline
-    if _pipeline is None:
-        _pipeline = RAGPipeline()
-    return _pipeline
+def _get_pipeline(request: Request) -> RAGPipeline:
+    """The pipeline created once by the application lifespan (see web/app.py)."""
+    pipeline = getattr(request.app.state, "pipeline", None)
+    if pipeline is None:
+        raise RuntimeError("RAG pipeline is not initialized: application startup did not complete")
+    return pipeline
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -55,7 +55,7 @@ def ask(request: Request, question: str = Form(default="")):
         error = "Пожалуйста, введите вопрос."
     else:
         try:
-            result = _get_pipeline().query(normalized_question)
+            result = _get_pipeline(request).query(normalized_question)
             answer = result.get("answer", "")
             context_docs = result.get("context_docs") or []
             from_cache = result.get("from_cache")
