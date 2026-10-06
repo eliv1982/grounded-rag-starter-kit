@@ -5,6 +5,7 @@ fake chat client. They prove that cached answers never outlive the configuration
 
 import hashlib
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -262,15 +263,47 @@ def test_positive_context_makes_exactly_one_llm_call(make_pipeline):
 # ---- fingerprint contents ----
 
 
-def test_fingerprint_payload_has_no_secrets_or_runtime_paths(make_pipeline, index_env, tmp_path, chroma_dir):
+SECRET_BASE_URL = "https://svc-user:pw-TOPSECRET@gateway.example/v1?api_key=TOPSECRET-q"
+
+
+def _pipeline_with_secrets(make_pipeline, index_env):
     index_env.setenv("LLM_API_KEY", "sk-live-TOPSECRET-key")
     index_env.setenv("OPENAI_API_KEY", "sk-legacy-TOPSECRET-key")
-    pipeline, _ = make_pipeline(LLM_BASE_URL="https://svc-user:pw-TOPSECRET@gateway.example/v1?api_key=TOPSECRET-q")
+    return make_pipeline(LLM_BASE_URL=SECRET_BASE_URL)[0]
 
-    visible = canonical_json(pipeline.answer_config) + pipeline.answer_fingerprint + repr(pipeline.get_stats())
 
-    assert "TOPSECRET" not in visible and "svc-user" not in visible and "gateway.example" not in visible
-    assert str(tmp_path) not in visible and chroma_dir not in visible
+def _path_spellings(path):
+    """Every way a path can show up in text: as is, POSIX-style, and backslash-escaped (repr/JSON on Windows)."""
+    raw = str(path)
+    return {raw, Path(raw).as_posix(), raw.replace("\\", "\\\\")}
+
+
+def test_fingerprint_payload_has_no_secrets_credentials_urls_or_runtime_paths(
+    make_pipeline, index_env, tmp_path, chroma_dir
+):
+    pipeline = _pipeline_with_secrets(make_pipeline, index_env)
+
+    visible = canonical_json(pipeline.answer_config) + pipeline.answer_fingerprint
+
+    for leaked in ("TOPSECRET", "svc-user", "gateway.example", "://"):
+        assert leaked not in visible
+    for path in (tmp_path, chroma_dir):
+        for spelling in _path_spellings(path):
+            assert spelling not in visible
+
+
+def test_diagnostic_stats_have_no_secrets_but_may_report_the_index_location(
+    make_pipeline, index_env, chroma_dir
+):
+    pipeline = _pipeline_with_secrets(make_pipeline, index_env)
+
+    stats = pipeline.get_stats()
+
+    for leaked in ("TOPSECRET", "svc-user", "gateway.example", "://"):
+        assert leaked not in repr(stats)
+    # The Chroma directory is an intentional operational diagnostic (the CLI `stats` command prints it).
+    # It is not part of the cache fingerprint, which is what the test above guards.
+    assert stats["vector_store"]["persist_directory"] == chroma_dir
 
 
 def test_fingerprint_carries_the_index_identity_and_is_reported(make_pipeline):
