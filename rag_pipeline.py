@@ -4,12 +4,12 @@
 """
 
 import os
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app_core.generation.answer_generator import generate_answer
-from app_core.generation.prompts import build_rag_prompt
+from app_core.generation.prompts import build_insufficient_basis_answer, build_rag_prompt
+from app_core.retrieval.selection import select_context, validate_selection_params
 from cache import RAGCache
 from llm_client import get_llm_client
 from corpus_config import default_corpus_entries
@@ -36,6 +36,25 @@ def _normalize_cached_context(raw: Any) -> Optional[List[Dict[str, Any]]]:
     return out or None
 
 
+def _env_int(name: str, default: str, minimum: int) -> int:
+    raw = os.getenv(name, default)
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be an integer >= {minimum}, got {raw!r}") from None
+    if value < minimum:
+        raise ValueError(f"{name} must be an integer >= {minimum}, got {raw!r}")
+    return value
+
+
+def _env_float(name: str, default: str) -> float:
+    raw = os.getenv(name, default)
+    try:
+        return float(raw)
+    except ValueError:
+        raise ValueError(f"{name} must be a number, got {raw!r}") from None
+
+
 class RAGPipeline:
     """Основной pipeline для RAG системы в API режиме."""
 
@@ -60,9 +79,11 @@ class RAGPipeline:
         # - RAG_TOP_K keeps legacy meaning for final returned context size
         # - new knobs control internal quality pass
         # Raw retrieval defaults to 10 independently from legacy RAG_TOP_K.
-        self.raw_top_k = int(os.getenv("RAG_RAW_TOP_K", "10"))
-        self.max_distance = float(os.getenv("RAG_MAX_DISTANCE", "0.44"))
-        self.final_top_k = int(os.getenv("RAG_FINAL_TOP_K", os.getenv("RAG_TOP_K", "5")))
+        self.raw_top_k = _env_int("RAG_RAW_TOP_K", "10", minimum=1)
+        self.max_distance = _env_float("RAG_MAX_DISTANCE", "0.44")
+        final_name = "RAG_FINAL_TOP_K" if "RAG_FINAL_TOP_K" in os.environ else "RAG_TOP_K"
+        self.final_top_k = _env_int(final_name, "5", minimum=1)
+        validate_selection_params(self.max_distance, self.final_top_k)
         self.top_k = self.final_top_k
         self.max_tokens = int(os.getenv("RAG_MAX_TOKENS", "1500"))
         self.temperature = float(os.getenv("RAG_TEMPERATURE", "0.3"))
@@ -95,58 +116,6 @@ class RAGPipeline:
         self.cache = RAGCache(db_path=cache_db_path)
 
         print("RAG Pipeline инициализирован")
-
-    @staticmethod
-    def _normalize_section_heading(heading: str) -> str:
-        # Normalize heading for stable dedup keys across formatting variants.
-        compact = re.sub(r"\s+", " ", (heading or "").strip())
-        return compact.lower()
-
-    def _dedup_key(self, doc: Dict[str, Any]) -> str:
-        meta = doc.get("metadata") or {}
-        source = (meta.get("source") or "").strip()
-        source_display = (meta.get("source_display") or "").strip()
-        source_key = source or source_display or "unknown_source"
-        heading = self._normalize_section_heading(str(meta.get("section_heading") or ""))
-        if heading:
-            return f"{source_key}::{heading}"
-        return source_key
-
-    def _apply_retrieval_quality_pass(self, docs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        if not docs:
-            return []
-
-        # 1) soft cutoff
-        after_cutoff = [
-            d
-            for d in docs
-            if d.get("distance") is not None and float(d["distance"]) <= self.max_distance
-        ]
-
-        # 2) dedup by source + normalized heading (or source only if heading absent)
-        deduped: List[Dict[str, Any]] = []
-        seen = set()
-        for doc in after_cutoff:
-            key = self._dedup_key(doc)
-            if key in seen:
-                continue
-            seen.add(key)
-            deduped.append(doc)
-
-        # 3) guarded fallback:
-        # - only when cutoff returned at least one document
-        # - only when after cutoff+dedup we have exactly one document
-        if len(after_cutoff) > 0 and len(deduped) == 1:
-            used_ids = {d.get("id") for d in deduped}
-            for doc in docs:
-                if doc.get("id") in used_ids:
-                    continue
-                deduped.append(doc)
-                if len(deduped) >= 3:  # one kept + up to 2 fallback docs
-                    break
-
-        # 4) final clamp
-        return deduped[: max(1, self.final_top_k)]
 
     def _create_prompt(self, query: str, context_docs: List[Dict[str, Any]]) -> str:
         return build_rag_prompt(query, context_docs)
@@ -182,11 +151,26 @@ class RAGPipeline:
 
         print("[*] Поиск релевантных документов...")
         raw_docs = self.vector_store.search(user_query, top_k=self.raw_top_k)
-        context_docs = self._apply_retrieval_quality_pass(raw_docs)
+        context_docs = select_context(
+            raw_docs, max_distance=self.max_distance, final_top_k=self.final_top_k
+        )
         print(
             f"[+] Найдено {len(context_docs)} релевантных документов "
             f"(raw={len(raw_docs)}, cutoff<={self.max_distance}, final_top_k={self.final_top_k})"
         )
+
+        if not context_docs:
+            # Grounding gate: no qualifying context -> no LLM call, nothing cached.
+            print("[!] Нет подходящего контекста: LLM не вызывается")
+            return {
+                "query": user_query,
+                "answer": build_insufficient_basis_answer(user_query),
+                "from_cache": False,
+                "context_docs": [],
+                "model": "",
+                "mode": "API",
+                "insufficient_basis": True,
+            }
 
         print("[*] Формирование промпта...")
         prompt = self._create_prompt(user_query, context_docs)
@@ -215,6 +199,7 @@ class RAGPipeline:
             "context_docs": context_docs,
             "model": self.model,
             "mode": "API",
+            "insufficient_basis": False,
         }
 
     def get_stats(self) -> Dict[str, Any]:

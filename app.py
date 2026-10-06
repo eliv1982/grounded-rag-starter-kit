@@ -40,6 +40,8 @@ def print_response(result: dict):
         print("[CACHE] Источник: КЕШ")
         if 'cached_at' in result:
             print(f"   Сохранено: {result['cached_at']}")
+    elif result.get("insufficient_basis"):
+        print("[NO-LLM] Подходящего контекста нет, LLM не вызывался")
     else:
         print(f"[LLM] Модель: {result.get('model', 'LLM')}")
         print(f"   Использовано документов: {len(result.get('context_docs', []))}")
